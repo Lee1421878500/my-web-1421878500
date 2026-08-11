@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>健康科技采购计划 - 乐仁堂京万红联动 · 思维导图</title>
+    <style>
+        :root {
+            --bg: #f0f2f5;
+            --card-bg: #ffffff;
+            --text: #2c3e50;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+            --shadow-lg: 0 10px 25px rgba(0,0,0,.1);
+
+            --c-root: #1a56db;
+            --c-root-light: #e8f0fe;
+            --c-1: #059669;
+            --c-1-light: #ecfdf5;
+            --c-2: #d97706;
+            --c-2-light: #fffbeb;
+            --c-3: #7c3aed;
+            --c-3-light: #f5f3ff;
+            --c-4: #db2777;
+            --c-4-light: #fdf2f8;
+            --c-5: #0891b2;
+            --c-5-light: #ecfeff;
+            --c-6: #ea580c;
+            --c-6-light: #fff7ed;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ── 顶栏 ── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            z-index: 100;
+            flex-shrink: 0;
+        }
+        .toolbar h1 {
+            font-size: 16px;
+            font-weight: 700;
+            margin-right: auto;
+            background: linear-gradient(135deg, var(--c-root), #6366f1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .btn {
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--card-bg);
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text);
+            transition: all .15s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn:hover { background: #f8fafc; border-color: #cbd5e1; }
+        .btn.primary { background: var(--c-root); color: #fff; border-color: var(--c-root); }
+        .btn.primary:hover { background: #1e40af; }
+        .btn.danger { color: #dc2626; }
+        .btn.danger:hover { background: #fef2f2; border-color: #fca5a5; }
+        .sep { width: 1px; height: 24px; background: var(--border); }
+
+        /* ── 主画布 ── */
+        .canvas-wrap {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+        .canvas {
+            position: relative;
+            min-width: 100%;
+            min-height: 100%;
+            padding: 60px 80px 120px;
+            user-select: none;
+        }
+
+        /* ── 节点 ── */
+        .node {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: transform .15s;
+            z-index: 1;
+        }
+        .node:hover { z-index: 10; }
+        .node.dragging { opacity: .6; z-index: 20; }
+
+        .node-card {
+            background: var(--card-bg);
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 16px;
+            min-width: 100px;
+            max-width: 200px;
+            text-align: center;
+            box-shadow: var(--shadow);
+            transition: all .2s;
+            position: relative;
+        }
+        .node.selected > .node-card {
+            box-shadow: 0 0 0 3px rgba(26,86,219,.3);
+            border-color: var(--c-root);
+        }
+        .node-card .label {
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+        .node-card .tag {
+            font-size: 10px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* 颜色主题 */
+        .t-root  .node-card { border-color: var(--c-root); background: var(--c-root-light); }
+        .t-1     .node-card { border-color: var(--c-1); background: var(--c-1-light); }
+        .t-2     .node-card { border-color: var(--c-2); background: var(--c-2-light); }
+        .t-3     .node-card { border-color: var(--c-3); background: var(--c-3-light); }
+        .t-4     .node-card { border-color: var(--c-4); background: var(--c-4-light); }
+        .t-5     .node-card { border-color: var(--c-5); background: var(--c-5-light); }
+        .t-6     .node-card { border-color: var(--c-6); background: var(--c-6-light); }
+        .t-info  .node-card { border-color: #0891b2; background: #ecfeff; }
+
+        /* 操作按钮 */
+        .node-actions {
+            display: flex;
+            gap: 4px;
+            margin-top: 6px;
+            opacity: 0;
+            transition: opacity .15s;
+        }
+        .node:hover .node-actions,
+        .node.selected .node-actions { opacity: 1; }
+
+        .node-actions .act {
+            width: 26px; height: 26px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--card-bg);
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            transition: all .12s;
+            box-shadow: var(--shadow);
+        }
+        .node-actions .act:hover { background: var(--c-root-light); color: var(--c-root); border-color: var(--c-root); }
+        .node-actions .act.del:hover { background: #fef2f2; color: #dc2626; border-color: #fca5a5; }
+
+        /* ── SVG 连线 ── */
+        .lines-svg {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .lines-svg path {
+            fill: none;
+            stroke: #cbd5e1;
+            stroke-width: 2;
+        }
+        .lines-svg path.hl { stroke: var(--c-root); stroke-width: 3; }
+
+        /* ── 编辑弹窗 ── */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+        }
+        .modal {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 24px;
+            min-width: 380px;
+            box-shadow: var(--shadow-lg);
+        }
+        .modal h3 { margin-bottom: 16px; font-size: 15px; }
+        .modal label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary); }
+        .modal input, .modal textarea, .modal select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            margin-bottom: 12px;
+            outline: none;
+        }
+        .modal input:focus, .modal textarea:focus, .modal select:focus { border-color: var(--c-root); box-shadow: 0 0 0 3px rgba(26,86,219,.15); }
+        .modal textarea { resize: vertical; min-height: 60px; }
+        .modal footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
+        /* 提示 */
+        .toast {
+            position: fixed; bottom: 30px; left: 50%;
+            transform: translateX(-50%);
+            background: #1e293b; color: #fff;
+            padding: 10px 22px;
+            border-radius: 8px;
+            font-size: 13px;
+            z-index: 1000;
+            animation: toastIn .3s ease;
+            pointer-events: none;
+        }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+
+        .info-bar {
+            padding: 6px 20px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: #fafbfc;
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+            display: flex;
+            gap: 16px;
+        }
+
+        /* Collapse indicator */
+        .collapse-dot {
+            position: absolute;
+            bottom: -8px;
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            background: var(--card-bg);
+            border: 2px solid var(--border);
+            cursor: pointer;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: var(--text-secondary);
+            transition: all .15s;
+        }
+        .collapse-dot:hover { border-color: var(--c-root); color: var(--c-root); }
+
+        @media print {
+            .toolbar, .info-bar, .node-actions, .collapse-dot { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ─── 顶栏 ─── -->
+<div class="toolbar">
+    <h1>🌿 健康科技采购计划 — 乐仁堂 · 京万红联动</h1>
+    <button class="btn" onclick="zoomIn()" title="放大">🔍+</button>
+    <button class="btn" onclick="zoomOut()" title="缩小">🔍−</button>
+    <button class="btn" onclick="resetView()" title="重置视图">↺ 重置</button>
+    <span class="sep"></span>
+    <button class="btn primary" onclick="addChild()">＋ 新增子节点</button>
+    <button class="btn" onclick="editNode()">✎ 编辑</button>
+    <button class="btn danger" onclick="deleteNode()" style="margin-left:0">🗑 删除</button>
+    <span class="sep"></span>
+    <button class="btn" onclick="expandAll()">⊞ 全部展开</button>
+    <button class="btn" onclick="collapseAll()">⊟ 全部折叠</button>
+    <span class="sep"></span>
+    <button class="btn" onclick="exportData()">📥 导出</button>
+    <button class="btn" onclick="document.getElementById('importFile').click()">📤 导入</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+</div>
+
+<!-- ─── 主画布 ─── -->
+<div class="canvas-wrap" id="canvasWrap">
+    <div class="canvas" id="canvas">
+        <svg class="lines-svg" id="linesSvg"></svg>
+    </div>
+</div>
+
+<div class="info-bar">
+    <span>💡 点击节点选中 | 双击编辑 | 拖动节点调整位置 | 拖动底部圆点折叠/展开</span>
+    <span id="nodeCount" style="margin-left:auto">节点数: 0</span>
+</div>
+
+<!-- ─── 编辑弹窗容器 ─── -->
+<div id="modalContainer"></div>
+
+<script>
+// ═══════════════════════════════════════
+// 数据模型
+// ═══════════════════════════════════════
+const initialData = {
+    id: 'root',
+    label: '健康科技采购计划\n乐仁堂·京万红联动',
+    theme: 'root',
+    collapsed: false,
+    children: [
+        {
+            id: 'b1',
+            label: '一、标准采购计划流程',
+            theme: '1',
+            collapsed: false,
+            children: [
+                { id: 'b1-1', label: '标准采购计划', theme: '1', collapsed: false, children: [] },
+                { id: 'b1-2', label: '标准销售订单', theme: '1', collapsed: false, children: [] },
+                { id: 'b1-3', label: '下达生产计划\n（月生产计划）', theme: '1', collapsed: false, children: [] },
+                { id: 'b1-4', label: 'MRP 运算', theme: '1', collapsed: false, children: [] },
+                {
+                    id: 'b1-5', label: '物料需求计划订单', theme: '1', collapsed: false,
+                    children: [
+                        { id: 'b1-5a', label: '生产计划订单\n（自制）', theme: '1', collapsed: false, children: [] },
+                        {
+                            id: 'b1-5b', label: '采购计划订单\n（先看库存）', theme: '1', collapsed: false,
+                            children: [
+                                { id: 'b1-5b1', label: '下达采购计划\n（对应采购计划类型）', theme: '1', collapsed: false, children: [] },
+                                { id: 'b1-5b2', label: '辅料包材采购订单\n上传 SRM', theme: '1', collapsed: false, children: [] },
+                                { id: 'b1-5b3', label: '到货单', theme: '1', collapsed: false, children: [] },
+                                { id: 'b1-5b4', label: '普通到货单\n（填写批号、销售日期、仓库）', theme: '1', collapsed: false, children: [] },
+                                { id: 'b1-5b5', label: '请验', theme: '1', collapsed: false, children: [] },
+                                { id: 'b1-5b6', label: '取样指令', theme: '1', collapsed: false, children: [] },
+                                {
+                                    id: 'b1-5b7', label: '检验报告', theme: '1', collapsed: false,
+                                    children: [
+                                        { id: 'b1-5b7a', label: '乐仁堂：参照请验单\n反生成检验结果', theme: 'info', collapsed: false, children: [] },
+                                        { id: 'b1-5b7b', label: '京万红：检验结果生成\n编制状态报告，再打印', theme: 'info', collapsed: false, children: [] }
+                                    ]
+                                },
+                                { id: 'b1-5b8', label: '放行单', theme: '1', collapsed: false, children: [] },
+                                { id: 'b1-5b9', label: '到货单收货', theme: '1', collapsed: false, children: [] },
+                                { id: 'b1-5b10', label: '📦 入库', theme: '1', collapsed: false, children: [] }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            id: 'b2',
+            label: '二、生产计划订单流程',
+            theme: '2',
+            collapsed: false,
+            children: [
+                { id: 'b2-1', label: '生产计划订单', theme: '2', collapsed: false, children: [] },
+                { id: 'b2-2', label: '流程生产订单', theme: '2', collapsed: false, children: [] },
+                { id: 'b2-3', label: '备料清单', theme: '2', collapsed: false, children: [] },
+                { id: 'b2-4', label: '车间领料申请', theme: '2', collapsed: false, children: [] },
+                {
+                    id: 'b2-5', label: '生成库存任务\n（京万红控制库存）', theme: '2', collapsed: false, children: []
+                },
+                {
+                    id: 'b2-6', label: '领用出库单\n（领用部门↔工作中心）', theme: '2', collapsed: false, children: []
+                }
+            ]
+        },
+        {
+            id: 'b3',
+            label: '三、车间产出流程',
+            theme: '3',
+            collapsed: false,
+            children: [
+                { id: 'b3-1', label: '车间产出记录\n（参照生产任务）', theme: '3', collapsed: false, children: [] },
+                { id: 'b3-2', label: '实际工时\n（工时确认单）', theme: '3', collapsed: false, children: [] },
+                {
+                    id: 'b3-3', label: '请验（中间品）', theme: '3', collapsed: false,
+                    children: [
+                        { id: 'b3-3a', label: '检验结果生效', theme: '3', collapsed: false, children: [] },
+                        {
+                            id: 'b3-3b', label: '生成入库任务\n（生产入库）', theme: '3', collapsed: false,
+                            children: [
+                                { id: 'b3-3b1', label: '仓库', theme: '3', collapsed: false, children: [] },
+                                { id: 'b3-3b2', label: '货位', theme: '3', collapsed: false, children: [] }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            id: 'b4',
+            label: '四、内包流程',
+            theme: '4',
+            collapsed: false,
+            children: [
+                { id: 'b4-1', label: '手动新增取样请验', theme: '4', collapsed: false, children: [] },
+                { id: 'b4-2', label: '检验', theme: '4', collapsed: false, children: [] },
+                { id: 'b4-3', label: '检验结果\n（生成产出记录后）', theme: '4', collapsed: false, children: [] },
+                { id: 'b4-4', label: '放行', theme: '4', collapsed: false, children: [] },
+                { id: 'b4-5', label: '📦 入库', theme: '4', collapsed: false, children: [] }
+            ]
+        },
+        {
+            id: 'b5',
+            label: '五、销售流程',
+            theme: '5',
+            collapsed: false,
+            children: [
+                {
+                    id: 'b5-1', label: '乐仁堂\n（只发货给健康科技）', theme: '5', collapsed: false,
+                    children: [
+                        { id: 'b5-1a', label: '销售订单发货', theme: '5', collapsed: false, children: [] },
+                        { id: 'b5-1b', label: '销售提货单\n（维护批号、仓库）', theme: '5', collapsed: false, children: [] }
+                    ]
+                },
+                {
+                    id: 'b5-2', label: '京万红\n（两票客户提货）', theme: '5', collapsed: false,
+                    children: [
+                        { id: 'b5-2a', label: '销售订单发货', theme: '5', collapsed: false, children: [] },
+                        { id: 'b5-2b', label: '销售提货单\n（维护批号、仓库）', theme: '5', collapsed: false, children: [] }
+                    ]
+                }
+            ]
+        },
+        {
+            id: 'b6',
+            label: '六、20260805 会议纪要',
+            theme: '6',
+            collapsed: false,
+            children: [
+                { id: 'b6-1', label: '⚠️ 受托一定不要手动下达\n（根据材料数据判断）', theme: '6', collapsed: false, children: [] },
+                { id: 'b6-2', label: '委托采购订单', theme: '6', collapsed: false, children: [] },
+                { id: 'b6-3', label: '受托销售订单', theme: '6', collapsed: false, children: [] },
+                { id: 'b6-4', label: 'MRP 运算', theme: '6', collapsed: false, children: [] },
+                {
+                    id: 'b6-5', label: '采购价目表', theme: '6', collapsed: false,
+                    children: [
+                        { id: 'b6-5a', label: '供应商', theme: '6', collapsed: false, children: [] },
+                        { id: 'b6-5b', label: '物料', theme: '6', collapsed: false, children: [] },
+                        { id: 'b6-5c', label: '基准价格', theme: '6', collapsed: false, children: [] }
+                    ]
+                }
+            ]
+        }
+    ]
+};
+
+// ═══════════════════════════════════════
+// 全局状态
+// ═══════════════════════════════════════
+let data = JSON.parse(JSON.stringify(initialData));
+let selectedId = null;
+let scale = 1;
+let panX = 0, panY = 0;
+let layoutCache = {}; // id -> {x, y, w, h}
+
+const H_GAP = 60;   // 节点间水平间距
+const V_GAP = 28;   // 节点间垂直间距
+const NODE_H = 60;  // 默认节点高度
+
+// ═══════════════════════════════════════
+// 布局算法（自底向上）
+// ═══════════════════════════════════════
+function layoutTree(node, depth = 0) {
+    const children = node.children || [];
+    if (children.length === 0) {
+        const w = Math.max(100, measureWidth(node.label));
+        const h = measureHeight(node.label);
+        const x = 0;
+        const y = 0;
+        layoutCache[node.id] = { x, y, w, h, depth, totalH: h, midY: h / 2 };
+        return { w, h, midOffsets: [h / 2] };
+    }
+
+    // 递归布局子节点
+    const childLayouts = children.map(c => layoutTree(c, depth + 1));
+    const childTotalH = childLayouts.reduce((s, l) => s + l.h + V_GAP, -V_GAP);
+
+    const myW = Math.max(100, measureWidth(node.label));
+    const myH = measureHeight(node.label);
+
+    let cy = 0;
+    const midOffsets = [];
+    for (let i = 0; i < children.length; i++) {
+        const cl = childLayouts[i];
+        layoutCache[children[i].id].x = myW + H_GAP;
+        layoutCache[children[i].id].y = cy;
+        layoutCache[children[i].id].depth = depth + 1;
+        midOffsets.push(cy + cl.h / 2);
+        cy += cl.h + V_GAP;
+    }
+
+    const totalH = Math.max(myH, childTotalH);
+    const myY = (totalH - myH) / 2;
+    layoutCache[node.id] = { x: 0, y: myY, w: myW, h: myH, depth, totalH, midY: myY + myH / 2 };
+
+    return { w: myW + H_GAP + Math.max(...children.map(c => layoutCache[c.id].w)), h: totalH, midOffsets };
+}
+
+function measureWidth(label) {
+    const lines = label.split('\n');
+    const maxLen = Math.max(...lines.map(l => l.length));
+    return maxLen * 16 + 36; // 粗略估算：中文字符宽度
+}
+
+function measureHeight(label) {
+    const lines = label.split('\n');
+    return lines.length * 22 + 24;
+}
+
+// ═══════════════════════════════════════
+// 渲染
+// ═══════════════════════════════════════
+function collectVisibleNodes(node, depth, result = []) {
+    if (!node) return result;
+    result.push({ ...layoutCache[node.id], id: node.id, label: node.label, theme: node.theme, depth, collapsed: node.collapsed, hasChildren: (node.children && node.children.length > 0) });
+    if (!node.collapsed && node.children) {
+        for (const child of node.children) {
+            collectVisibleNodes(child, depth + 1, result);
+        }
+    }
+    return result;
+}
+
+function render() {
+    layoutCache = {};
+    layoutTree(data);
+
+    const canvas = document.getElementById('canvas');
+    const svg = document.getElementById('linesSvg');
+
+    // 清除旧节点（保留 SVG）
+    canvas.querySelectorAll('.node').forEach(n => n.remove());
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // 获取可见节点
+    const rootLayout = layoutCache[data.id];
+    const totalW = rootLayout ? rootLayout.w : 1200;
+    const totalH = rootLayout ? rootLayout.h : 800;
+
+    canvas.style.width = (totalW * scale + 400) + 'px';
+    canvas.style.height = (totalH * scale + 400) + 'px';
+    svg.setAttribute('width', totalW * scale + 400);
+    svg.setAttribute('height', totalH * scale + 400);
+
+    // 创建节点
+    const nodeEls = {};
+    const visible = [];
+    collectVisibleNodes(data, 0, visible);
+
+    for (const vn of visible) {
+        const el = document.createElement('div');
+        el.className = `node t-${vn.theme}`;
+        if (vn.id === selectedId) el.classList.add('selected');
+        el.id = 'node-' + vn.id;
+        el.setAttribute('data-id', vn.id);
+        el.style.left = (vn.x + 40) + 'px';
+        el.style.top = (vn.y + 40) + 'px';
+
+        el.innerHTML = `
+            <div class="node-card" style="width:${vn.w}px; min-height:${vn.h}px;">
+                <div class="label">${escapeHtml(vn.label)}</div>
+                ${vn.hasChildren ? `<div class="tag">${vn.collapsed ? '▶ 已折叠' : '▼'}</div>` : ''}
+            </div>
+            <div class="node-actions">
+                <button class="act" title="新增子节点" data-action="add">＋</button>
+                <button class="act" title="编辑" data-action="edit">✎</button>
+                <button class="act del" title="删除" data-action="delete">✕</button>
+            </div>
+        `;
+
+        // 折叠圆点
+        if (vn.hasChildren) {
+            const dot = document.createElement('div');
+            dot.className = 'collapse-dot';
+            dot.textContent = vn.collapsed ? '▶' : '▼';
+            dot.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleCollapse(vn.id);
+            });
+            el.appendChild(dot);
+        }
+
+        el.addEventListener('click', (e) => {
+            if (e.target.closest('.node-actions') || e.target.closest('.collapse-dot')) return;
+            selectNode(vn.id);
+        });
+        el.addEventListener('dblclick', (e) => {
+            if (e.target.closest('.node-actions') || e.target.closest('.collapse-dot')) return;
+            selectNode(vn.id);
+            editNode();
+        });
+
+        // 操作按钮事件
+        el.querySelector('[data-action="add"]').addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectNode(vn.id);
+            addChild();
+        });
+        el.querySelector('[data-action="edit"]').addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectNode(vn.id);
+            editNode();
+        });
+        el.querySelector('[data-action="delete"]').addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectNode(vn.id);
+            deleteNode();
+        });
+
+        // 拖动
+        el.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.node-actions') || e.target.closest('.collapse-dot')) return;
+            startDrag(e, vn.id);
+        });
+
+        canvas.appendChild(el);
+        nodeEls[vn.id] = el;
+    }
+
+    // 绘制连线
+    drawLines(data, nodeEls, svg);
+
+    // 更新节点数
+    document.getElementById('nodeCount').textContent = '节点数: ' + countNodes(data);
+
+    updateScale();
+}
+
+function drawLines(node, nodeEls, svg) {
+    if (!node || node.collapsed || !node.children) return;
+
+    const parentEl = nodeEls[node.id];
+    if (!parentEl) return;
+
+    const parentLayout = layoutCache[node.id];
+    if (!parentLayout) return;
+
+    for (const child of node.children) {
+        const childEl = nodeEls[child.id];
+        if (!childEl) continue;
+
+        const pRect = parentEl.getBoundingClientRect();
+        const cRect = childEl.getBoundingClientRect();
+        const wrapRect = document.getElementById('canvasWrap').getBoundingClientRect();
+
+        const px = pRect.right - wrapRect.left + document.getElementById('canvasWrap').scrollLeft - 4;
+        const py = pRect.top + pRect.height / 2 - wrapRect.top + document.getElementById('canvasWrap').scrollTop;
+        const cx = cRect.left - wrapRect.left + document.getElementById('canvasWrap').scrollLeft + 4;
+        const cy = cRect.top + cRect.height / 2 - wrapRect.top + document.getElementById('canvasWrap').scrollTop;
+
+        const midX = (px + cx) / 2;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const d = `M ${px} ${py} C ${midX} ${py}, ${midX} ${cy}, ${cx} ${cy}`;
+        path.setAttribute('d', d);
+
+        // 高亮选中节点的连线
+        if (node.id === selectedId || child.id === selectedId) {
+            path.classList.add('hl');
+        }
+
+        svg.appendChild(path);
+
+        // 递归
+        drawLines(child, nodeEls, svg);
+    }
+}
+
+function updateScale() {
+    const nodes = document.querySelectorAll('.node');
+    nodes.forEach(n => {
+        n.style.transform = `scale(${scale})`;
+        n.style.transformOrigin = 'top left';
+    });
+}
+
+// ═══════════════════════════════════════
+// 交互
+// ═══════════════════════════════════════
+function selectNode(id) {
+    selectedId = id;
+    document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
+    const el = document.getElementById('node-' + id);
+    if (el) el.classList.add('selected');
+    // 重绘连线高亮
+    render();
+}
+
+function findNode(node, id) {
+    if (node.id === id) return node;
+    if (!node.children) return null;
+    for (const child of node.children) {
+        const found = findNode(child, id);
+        if (found) return found;
+    }
+    return null;
+}
+
+function findParent(root, childId) {
+    if (!root.children) return null;
+    for (const child of root.children) {
+        if (child.id === childId) return root;
+        const found = findParent(child, childId);
+        if (found) return found;
+    }
+    return null;
+}
+
+function toggleCollapse(id) {
+    const node = findNode(data, id);
+    if (node) {
+        node.collapsed = !node.collapsed;
+        render();
+    }
+}
+
+function expandAll() {
+    walkTree(data, n => { n.collapsed = false; });
+    render();
+    toast('已全部展开');
+}
+
+function collapseAll() {
+    walkTree(data, n => {
+        if (n.id !== 'root' && n.children && n.children.length > 0) n.collapsed = true;
+    });
+    render();
+    toast('已全部折叠（根节点除外）');
+}
+
+function walkTree(node, fn) {
+    fn(node);
+    if (node.children) node.children.forEach(c => walkTree(c, fn));
+}
+
+function countNodes(node) {
+    let count = 1;
+    if (node.children) node.children.forEach(c => { count += countNodes(c); });
+    return count;
+}
+
+function generateId() {
+    return 'n_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+}
+
+// ── 新增子节点 ──
+function addChild() {
+    if (!selectedId) { toast('请先选中一个节点'); return; }
+    const parent = findNode(data, selectedId);
+    if (!parent) return;
+    if (!parent.children) parent.children = [];
+
+    showModal('新增子节点', {
+        label: '新节点',
+        theme: parent.theme || '1'
+    }, (formData) => {
+        parent.children.push({
+            id: generateId(),
+            label: formData.label,
+            theme: formData.theme,
+            collapsed: false,
+            children: []
+        });
+        parent.collapsed = false;
+        selectedId = parent.children[parent.children.length - 1].id;
+        render();
+        toast('已新增子节点');
+    });
+}
+
+// ── 编辑节点 ──
+function editNode() {
+    if (!selectedId) { toast('请先选中一个节点'); return; }
+    const node = findNode(data, selectedId);
+    if (!node) return;
+
+    showModal('编辑节点', {
+        label: node.label,
+        theme: node.theme
+    }, (formData) => {
+        node.label = formData.label;
+        node.theme = formData.theme;
+        render();
+        toast('节点已更新');
+    });
+}
+
+// ── 删除节点 ──
+function deleteNode() {
+    if (!selectedId) { toast('请先选中一个节点'); return; }
+    if (selectedId === 'root') { toast('不能删除根节点'); return; }
+
+    const parent = findParent(data, selectedId);
+    if (!parent || !parent.children) return;
+
+    if (!confirm('确定删除该节点及其所有子节点？')) return;
+
+    parent.children = parent.children.filter(c => c.id !== selectedId);
+    selectedId = parent.id;
+    render();
+    toast('节点已删除');
+}
+
+// ═══════════════════════════════════════
+// 弹窗
+// ═══════════════════════════════════════
+function showModal(title, initial, onConfirm) {
+    const container = document.getElementById('modalContainer');
+    const themes = [
+        { v: 'root', l: '根节点（蓝色）' },
+        { v: '1', l: '流程1（绿色）' },
+        { v: '2', l: '流程2（橙色）' },
+        { v: '3', l: '流程3（紫色）' },
+        { v: '4', l: '流程4（粉色）' },
+        { v: '5', l: '流程5（青色）' },
+        { v: '6', l: '流程6（深橙）' },
+        { v: 'info', l: '信息节点（浅青）' }
+    ];
+
+    container.innerHTML = `
+        <div class="modal-overlay" id="modalOverlay">
+            <div class="modal">
+                <h3>${title}</h3>
+                <label>节点文本</label>
+                <textarea id="modalLabel" placeholder="输入节点内容，支持换行">${escapeHtml(initial.label)}</textarea>
+                <label>颜色主题</label>
+                <select id="modalTheme">
+                    ${themes.map(t => `<option value="${t.v}" ${t.v === initial.theme ? 'selected' : ''}>${t.l}</option>`).join('')}
+                </select>
+                <footer>
+                    <button class="btn" onclick="closeModal()">取消</button>
+                    <button class="btn primary" id="modalConfirm">确定</button>
+                </footer>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('modalOverlay').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) closeModal();
+    });
+    document.getElementById('modalConfirm').addEventListener('click', () => {
+        const label = document.getElementById('modalLabel').value.trim();
+        const theme = document.getElementById('modalTheme').value;
+        if (!label) { toast('请输入节点内容'); return; }
+        onConfirm({ label, theme });
+        closeModal();
+    });
+    document.getElementById('modalLabel').focus();
+    document.getElementById('modalLabel').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.metaKey) {
+            document.getElementById('modalConfirm').click();
+        }
+    });
+}
+
+function closeModal() {
+    document.getElementById('modalContainer').innerHTML = '';
+}
+
+// ═══════════════════════════════════════
+// 拖动节点
+// ═══════════════════════════════════════
+let dragInfo = null;
+function startDrag(e, id) {
+    e.preventDefault();
+    const nodeEl = document.getElementById('node-' + id);
+    const rect = nodeEl.getBoundingClientRect();
+    dragInfo = {
+        id,
+        startX: e.clientX,
+        startY: e.clientY,
+        origLeft: parseFloat(nodeEl.style.left) || 0,
+        origTop: parseFloat(nodeEl.style.top) || 0
+    };
+    nodeEl.classList.add('dragging');
+
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', stopDrag);
+}
+
+function onDrag(e) {
+    if (!dragInfo) return;
+    const dx = (e.clientX - dragInfo.startX) / scale;
+    const dy = (e.clientY - dragInfo.startY) / scale;
+    const el = document.getElementById('node-' + dragInfo.id);
+    if (el) {
+        el.style.left = (dragInfo.origLeft + dx) + 'px';
+        el.style.top = (dragInfo.origTop + dy) + 'px';
+    }
+    // 拖动时重绘 SVG 连线
+    const svg = document.getElementById('linesSvg');
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    drawLines(data, getAllNodeEls(), svg);
+}
+
+function stopDrag() {
+    if (dragInfo) {
+        const el = document.getElementById('node-' + dragInfo.id);
+        if (el) {
+            // 更新 layoutCache
+            const info = layoutCache[dragInfo.id];
+            if (info) {
+                info._dx = (parseFloat(el.style.left) || info.x + 40) - (info.x + 40);
+                info._dy = (parseFloat(el.style.top) || info.y + 40) - (info.y + 40);
+            }
+        }
+        document.querySelectorAll('.node.dragging').forEach(n => n.classList.remove('dragging'));
+        dragInfo = null;
+    }
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', stopDrag);
+    render();
+}
+
+function getAllNodeEls() {
+    const els = {};
+    document.querySelectorAll('.node').forEach(n => {
+        els[n.getAttribute('data-id')] = n;
+    });
+    return els;
+}
+
+// ═══════════════════════════════════════
+// 视图操作
+// ═══════════════════════════════════════
+function zoomIn() {
+    scale = Math.min(2, scale + 0.1);
+    render();
+    toast('缩放: ' + Math.round(scale * 100) + '%');
+}
+
+function zoomOut() {
+    scale = Math.max(0.3, scale - 0.1);
+    render();
+    toast('缩放: ' + Math.round(scale * 100) + '%');
+}
+
+function resetView() {
+    scale = 1;
+    document.getElementById('canvasWrap').scrollTo(0, 0);
+    selectedId = null;
+    render();
+    toast('视图已重置');
+}
+
+// ═══════════════════════════════════════
+// 导入/导出
+// ═══════════════════════════════════════
+function exportData() {
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '健康科技采购计划_思维导图_' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('已导出数据文件');
+}
+
+function importData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const imported = JSON.parse(e.target.result);
+            if (!imported.id || !imported.label) throw new Error('无效格式');
+            data = imported;
+            selectedId = null;
+            render();
+            toast('导入成功！');
+        } catch (err) {
+            toast('导入失败：文件格式不正确');
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+// ═══════════════════════════════════════
+// 键盘快捷键
+// ═══════════════════════════════════════
+document.addEventListener('keydown', (e) => {
+    if (document.getElementById('modalContainer').children.length > 0) return; // 弹窗打开时不处理
+
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        // 简单的撤销：重新渲染
+        render();
+        toast('已刷新布局');
+    }
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedId && selectedId !== 'root') {
+            e.preventDefault();
+            deleteNode();
+        }
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+        e.preventDefault();
+        editNode();
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+        e.preventDefault();
+        addChild();
+    }
+    if (e.key === 'Escape') {
+        selectedId = null;
+        render();
+    }
+});
+
+// ═══════════════════════════════════════
+// 鼠标滚轮缩放
+// ═══════════════════════════════════════
+document.getElementById('canvasWrap').addEventListener('wheel', (e) => {
+    if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        if (e.deltaY < 0) zoomIn();
+        else zoomOut();
+    }
+}, { passive: false });
+
+// ═══════════════════════════════════════
+// 工具
+// ═══════════════════════════════════════
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+}
+
+let toastTimer;
+function toast(msg) {
+    const old = document.querySelector('.toast');
+    if (old) old.remove();
+    clearTimeout(toastTimer);
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    toastTimer = setTimeout(() => el.remove(), 2000);
+}
+
+// ═══════════════════════════════════════
+// 启动
+// ═══════════════════════════════════════
+render();
+toast('思维导图已就绪 — 点击节点开始编辑');
+</script>
+</body>
+</html>
