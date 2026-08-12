@@ -2136,33 +2136,93 @@ function getCurrentPosition() {
 async function fetchWeather(lat, lon) {
     const card = document.getElementById('weatherCard');
 
-    // 1) 反向地理 → 获取省/市/区（BigDataCloud 免费 API，无需 Key，CORS 友好）
-    let cityName = `${lat}°, ${lon}°`;
+    // 1) 优先用 BigDataCloud 获取中文省/市/区（无 Key、CORS 开放，但少数网络可能超时）
+    let parts = [];
     try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 5000);
         const geoUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=zh`;
-        const geoRes = await fetch(geoUrl);
+        const geoRes = await fetch(geoUrl, { signal: ctrl.signal });
+        clearTimeout(tid);
         if (geoRes.ok) {
             const geo = await geoRes.json();
-            const parts = [];
-            if (geo.principalSubdivision) parts.push(geo.principalSubdivision); // 省
-            if (geo.city) parts.push(geo.city);                                   // 市
-            if (geo.locality && geo.locality !== geo.city) parts.push(geo.locality); // 区
-            cityName = parts.length ? parts.join(' ') : (geo.city || geo.principalSubdivision || cityName);
+            if (geo.principalSubdivision) parts.push(geo.principalSubdivision);
+            if (geo.city) parts.push(geo.city);
+            if (geo.locality && geo.locality !== geo.city) parts.push(geo.locality);
         }
     } catch {}
 
-    // 2) 实况 + 未来 7 日预报（取前 3 日展示）
-    const fcUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-        `&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,visibility` +
-        `&daily=weather_code,temperature_2m_max,temperature_2m_min` +
-        `&timezone=auto&wind_speed_unit=kmh`;
-    const fcRes = await fetch(fcUrl);
-    if (!fcRes.ok) throw new Error('天气服务响应失败（' + fcRes.status + '）');
-    const data = await fcRes.json();
-    if (!data.current || !data.daily) throw new Error('天气数据格式异常');
+    // 2) 同时获取天气数据（Open-Meteo）
+    let cur = null, daily = null;
+    try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 5000);
+        const fcUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+            `&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,visibility` +
+            `&daily=weather_code,temperature_2m_max,temperature_2m_min` +
+            `&timezone=auto&wind_speed_unit=kmh`;
+        const fcRes = await fetch(fcUrl, { signal: ctrl.signal });
+        clearTimeout(tid);
+        if (fcRes.ok) {
+            const data = await fcRes.json();
+            cur = data.current; daily = data.daily;
+        }
+    } catch {}
 
-    const cur = data.current;
-    const daily = data.daily;
+    // 3) 如果 Open-Meteo 失败，用 wttr.in 兜底（同时也能补上中文地址）
+    if (!cur || !daily) {
+        try {
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 8000);
+            // 用 format=j2 取精简数据，lang=zh 让天气描述返回中文
+            const wtUrl = `https://wttr.in/${lat},${lon}?format=j1&lang=zh`;
+            const wtRes = await fetch(wtUrl, { signal: ctrl.signal });
+            clearTimeout(tid);
+            if (wtRes.ok) {
+                const wt = await wtRes.json();
+                const today = wt.weather && wt.weather[0];
+                if (today) {
+                    // wttr.in 风向角度是字符串
+                    const windDeg = +(today.hourly?.[0]?.winddirDegree || 0);
+                    const cur2 = {
+                        temperature_2m: +today.hourly?.[0]?.tempC || +today.mintempC || 0,
+                        relative_humidity_2m: +today.hourly?.[0]?.humidity || 50,
+                        apparent_temperature: +today.hourly?.[0]?.FeelsLikeC || +today.mintempC || 0,
+                        is_day: 1,
+                        weather_code: mapWttrDescCode(today.hourly?.[0]?.weatherCode),
+                        wind_direction_10m: windDeg,
+                        wind_speed_10m: +today.hourly?.[0]?.windspeedKmph || 0,
+                        visibility: 10000
+                    };
+                    const daily2 = {
+                        time: (wt.weather || []).slice(0, 3).map(d => d.date),
+                        weather_code: (wt.weather || []).slice(0, 3).map(d => mapWttrDescCode(d.hourly?.[0]?.weatherCode)),
+                        temperature_2m_max: (wt.weather || []).slice(0, 3).map(d => +d.maxtempC),
+                        temperature_2m_min: (wt.weather || []).slice(0, 3).map(d => +d.mintempC)
+                    };
+                    cur = cur2; daily = daily2;
+                    // 用 wttr.in 兜底地址（英文区名）
+                    if (!parts.length) {
+                        const area = wt.nearest_area && wt.nearest_area[0];
+                        if (area) {
+                            const regionZh = { 'Guangdong':'广东省', 'Fujian':'福建省', 'Jiangsu':'江苏省', 'Zhejiang':'浙江省', 'Beijing':'北京市', 'Shanghai':'上海市', 'Yunnan':'云南省', 'Sichuan':'四川省' };
+                            const cityZh = { 'Shenzhen':'深圳市', 'Guangzhou':'广州市', 'Beijing':'北京市', 'Shanghai':'上海市', 'Chengdu':'成都市', 'Hangzhou':'杭州市', 'Nanjing':'南京市', 'Xiamen':'厦门市', 'Kunming':'昆明市', 'Chongqing':'重庆市' };
+                            const region = area.region?.[0]?.value || '';
+                            const cityName = area.areaName?.[0]?.value || '';
+                            if (region) parts.push(regionZh[region] || region);
+                            if (cityName) parts.push(cityZh[cityName] || cityName);
+                        }
+                    }
+                }
+            }
+        } catch {}
+    }
+
+    // 4) 完全失败情况
+    if (!cur || !daily) throw new Error('天气数据获取失败，请检查网络后点击刷新');
+
+    // 5) 渲染
+    let cityName = parts.length ? parts.join(' ') : `${lat}°, ${lon}°`;
     const isDay = cur.is_day === 1;
     const wcode = cur.weather_code;
     const desc = WMO_DESC[wcode] || '未知';
@@ -2183,10 +2243,15 @@ async function fetchWeather(lat, lon) {
         </div>
         <button class="weather-refresh" onclick="refreshWeather()" title="刷新天气">↻</button>`;
 
-    // 3) 三日预报
+    // 6) 三日预报
     const fcHtml = daily.time.slice(0, 3).map((d, i) => {
-        const dt = new Date(d + 'T00:00:00');
-        const dayLabel = i === 0 ? '今天' : `${dt.getMonth() + 1}/${dt.getDate()}`;
+        let dt, dayLabel;
+        if (typeof d === 'string' && d.includes('-')) {
+            dt = new Date(d + 'T00:00:00');
+        } else {
+            dt = new Date(d);
+        }
+        dayLabel = i === 0 ? '今天' : `${dt.getMonth() + 1}/${dt.getDate()}`;
         return `<div class="fc-day">
             <div class="fc-icon">${getWeatherEmoji(daily.weather_code[i], 1)}</div>
             <div class="fc-temp">${Math.round(daily.temperature_2m_min[i])}°/${Math.round(daily.temperature_2m_max[i])}°</div>
@@ -2194,6 +2259,30 @@ async function fetchWeather(lat, lon) {
         </div>`;
     }).join('');
     document.getElementById('weatherForecast').innerHTML = fcHtml;
+}
+
+// wttr.in weatherCode (数字) → WMO 通用代码
+function mapWttrDescCode(c) {
+    const n = +c || 113;
+    if (n === 113) return 0;        // Sunny/Clear
+    if (n === 116) return 2;        // Partly cloudy
+    if (n === 119) return 3;        // Cloudy
+    if (n === 122) return 3;        // Overcast
+    if (n === 143 || n === 248 || n === 260) return 45;  // Mist/fog
+    if (n === 176 || n === 185 || n === 200) return 80;  // Patchy rain
+    if (n === 179 || n === 182 || n === 188) return 71;  // Snow
+    if (n === 227 || n === 230) return 75;  // Blizzard/heavy snow
+    if (n === 263 || n === 266 || n === 281 || n === 284) return 51; // Drizzle
+    if (n === 293 || n === 296 || n === 299) return 61;  // Light rain
+    if (n === 302 || n === 305 || n === 308) return 63;  // Moderate rain
+    if (n === 311 || n === 314 || n === 317) return 65;  // Heavy rain
+    if (n === 320 || n === 323 || n === 326) return 71;  // Light snow
+    if (n === 329 || n === 332 || n === 335) return 73;  // Moderate snow
+    if (n === 338 || n === 350 || n === 368) return 75;  // Heavy snow
+    if (n === 353 || n === 356 || n === 359) return 80;  // Rain showers
+    if (n === 362 || n === 365 || n === 374) return 75;  // Snow showers
+    if (n === 377 || n === 386 || n === 389 || n === 392 || n === 395) return 95;  // Thunder
+    return 0; // default clear
 }
 
 function setWeatherLoading(loading) {
