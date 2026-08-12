@@ -1030,7 +1030,6 @@
         <!-- 面板标签 -->
         <div class="sidebar-tabs">
             <button class="sidebar-tab active" onclick="switchSidebarPanel('notes')">📝 笔记</button>
-            <button class="sidebar-tab" onclick="switchSidebarPanel('tests')">☑ 测试</button>
         </div>
 
         <!-- 笔记面板 -->
@@ -1123,8 +1122,8 @@
 
     <!-- ═══════════ 右侧小组件面板 ═══════════ -->
     <div class="widget-panel" id="widgetPanel">
-        <!-- 天气 -->
-        <div class="widget-section">
+        <!-- 天气（已隐藏） -->
+        <div class="widget-section" style="display:none;">
             <div class="widget-section-title"><span class="dot"></span>天气</div>
             <div class="weather-card loading" id="weatherCard">
                 <div class="weather-place">📍 定位中...</div>
