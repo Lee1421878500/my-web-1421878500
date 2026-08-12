@@ -1122,8 +1122,8 @@
 
     <!-- ═══════════ 右侧小组件面板 ═══════════ -->
     <div class="widget-panel" id="widgetPanel">
-        <!-- 天气（已隐藏） -->
-        <div class="widget-section" style="display:none;">
+        <!-- 天气 -->
+        <div class="widget-section">
             <div class="widget-section-title"><span class="dot"></span>天气</div>
             <div class="weather-card loading" id="weatherCard">
                 <div class="weather-place">📍 定位中...</div>
@@ -2087,7 +2087,7 @@ async function initWeather() {
     setWeatherLoading(true);
     try {
         const pos = await getCurrentPosition();
-        await fetchWeather(pos.lat, pos.lon);
+        await fetchWeather(pos.lat, pos.lon, pos);
     } catch (e) {
         showWeatherError(e.message || '获取天气失败');
     }
@@ -2102,37 +2102,89 @@ async function refreshWeather() {
     if (btn) setTimeout(() => btn.classList.remove('spin'), 800);
 }
 
-function getCurrentPosition() {
-    return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-            reject(new Error('浏览器不支持地理定位'));
-            return;
-        }
-        // 10 分钟缓存位置
-        const cached = sessionStorage.getItem('weather_location');
-        if (cached) {
-            try {
-                const pos = JSON.parse(cached);
-                if (Date.now() - pos.ts < 600000) { resolve(pos); return; }
-            } catch {}
-        }
-        navigator.geolocation.getCurrentPosition(
-            pos => {
-                const loc = {
-                    lat: +pos.coords.latitude.toFixed(2),
-                    lon: +pos.coords.longitude.toFixed(2),
-                    ts: Date.now()
-                };
-                sessionStorage.setItem('weather_location', JSON.stringify(loc));
-                resolve(loc);
-            },
-            () => reject(new Error('请允许浏览器获取位置权限以显示天气')),
-            { timeout: 8000, maximumAge: 300000 }
-        );
-    });
+async function getCurrentPosition() {
+    // 10 分钟缓存位置
+    const cached = sessionStorage.getItem('weather_location');
+    if (cached) {
+        try {
+            const pos = JSON.parse(cached);
+            if (Date.now() - pos.ts < 600000) return pos;
+        } catch {}
+    }
+
+    // 1) 优先尝试浏览器 GPS 定位（精度最高）
+    if (navigator.geolocation) {
+        try {
+            const pos = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(
+                    p => resolve({
+                        lat: +p.coords.latitude.toFixed(2),
+                        lon: +p.coords.longitude.toFixed(2),
+                        ts: Date.now()
+                    }),
+                    reject,
+                    { timeout: 8000, maximumAge: 300000 }
+                );
+            });
+            sessionStorage.setItem('weather_location', JSON.stringify(pos));
+            return pos;
+        } catch {}
+    }
+
+    // 2) GPS 失败/被拒绝/超时 → IP 定位兜底，仍能显示城市与天气
+    const ipLoc = await locateByIP();
+    if (ipLoc) {
+        sessionStorage.setItem('weather_location', JSON.stringify(ipLoc));
+        return ipLoc;
+    }
+
+    throw new Error('无法获取位置：请允许浏览器定位权限，或检查网络后重试');
 }
 
-async function fetchWeather(lat, lon) {
+// IP 定位兜底（浏览器定位权限被拒绝时，根据公网 IP 获取大致城市）
+async function locateByIP() {
+    // ① ipapi.co
+    try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 6000);
+        const res = await fetch('https://ipapi.co/json/', { signal: ctrl.signal });
+        clearTimeout(tid);
+        if (res.ok) {
+            const j = await res.json();
+            if (j && j.latitude && j.longitude) {
+                return {
+                    lat: +j.latitude.toFixed(2),
+                    lon: +j.longitude.toFixed(2),
+                    ts: Date.now(),
+                    viaIP: true,
+                    addr: [j.region, j.city].filter(Boolean).join(' ')
+                };
+            }
+        }
+    } catch {}
+    // ② ip-api.com
+    try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 6000);
+        const res = await fetch('https://ip-api.com/json/?lang=zh-CN&fields=status,lat,lon,city,regionName,countryName', { signal: ctrl.signal });
+        clearTimeout(tid);
+        if (res.ok) {
+            const j = await res.json();
+            if (j.status === 'success' && j.lat) {
+                return {
+                    lat: +j.lat.toFixed(2),
+                    lon: +j.lon.toFixed(2),
+                    ts: Date.now(),
+                    viaIP: true,
+                    addr: [j.regionName, j.city].filter(Boolean).join(' ')
+                };
+            }
+        }
+    } catch {}
+    return null;
+}
+
+async function fetchWeather(lat, lon, pos = {}) {
     const card = document.getElementById('weatherCard');
 
     // 1) 优先用 BigDataCloud 获取中文省/市/区（无 Key、CORS 开放，但少数网络可能超时）
@@ -2221,7 +2273,8 @@ async function fetchWeather(lat, lon) {
     if (!cur || !daily) throw new Error('天气数据获取失败，请检查网络后点击刷新');
 
     // 5) 渲染
-    let cityName = parts.length ? parts.join(' ') : `${lat}°, ${lon}°`;
+    let cityName = parts.length ? parts.join(' ')
+        : (pos.addr || `${lat}°, ${lon}°`);
     const isDay = cur.is_day === 1;
     const wcode = cur.weather_code;
     const desc = WMO_DESC[wcode] || '未知';
