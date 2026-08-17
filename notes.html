@@ -746,6 +746,7 @@
             transition: all var(--transition-fast);
         }
         .save-dot.saving { background: var(--warn); animation: pulse .7s infinite; }
+        .save-dot.unsaved { background: var(--danger); }
         @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(1.5); } }
 
         /* 右键菜单 */
@@ -899,6 +900,9 @@
             border-radius: 16px;
             padding: 40px 36px;
             width: 360px;
+            max-height: 92vh;
+            overflow-y: auto;
+            box-sizing: border-box;
             box-shadow: var(--shadow-xl);
             animation: loginIn .5s cubic-bezier(.34,1.3,.64,1);
         }
@@ -982,21 +986,53 @@
             -webkit-backdrop-filter: blur(8px);
         }
         .user-badge:hover { background: var(--surface); border-color: var(--text3); }
+        .user-badge.logged-in { color: var(--success); border-color: var(--success); }
+
+        /* 登录页：跳过按钮 */
+        .skip-login {
+            text-align: center; font-size: 12px; color: var(--text3);
+            cursor: pointer; margin-top: 14px; user-select: none;
+        }
+        .skip-login:hover { color: var(--accent-personal); }
+
+        /* 开关 */
+        .toggle { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle .slider {
+            position: absolute; inset: 0; border-radius: 22px;
+            background: var(--text3); transition: .25s; cursor: pointer;
+        }
+        .toggle .slider::before {
+            content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
+            border-radius: 50%; background: #fff; transition: .25s;
+        }
+        .toggle input:checked + .slider { background: var(--accent-personal); }
+        .toggle input:checked + .slider::before { transform: translateX(18px); }
     </style>
+    <!-- CloudBase Web SDK（用于账号登录与云端同步） -->
+    <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.28.6/cloudbase.full.js"></script>
 </head>
 <body data-theme="light">
 
 <!-- ═══════════ 登录页面 ═══════════ -->
-<div class="login-overlay" id="loginOverlay">
+<div class="login-overlay hidden" id="loginOverlay">
     <div class="login-card">
         <div class="logo-row">
             <span class="icon">📒</span>
             <span class="title">云笔记</span>
         </div>
-        <div class="subtitle" id="loginSubtitle">登录以继续</div>
+        <div class="subtitle" id="loginSubtitle">登录后数据云端同步 · 多端通用</div>
         <div class="field">
-            <label>账号</label>
+            <label>云环境 ID（可选，首次使用请留空）</label>
+            <input type="text" id="envIdInput" placeholder="开通 CloudBase 后填写，如 my-notes-1a2b3c" spellcheck="false">
+        </div>
+        <div class="field">
+            <label>账号 / 用户名</label>
             <input type="text" id="loginUsername" placeholder="请输入账号" autocomplete="username" spellcheck="false">
+        </div>
+        <div class="field" id="emailField" style="display:none;">
+            <label>邮箱（注册时用于接收验证码）</label>
+            <input type="email" id="loginEmail" placeholder="name@example.com" autocomplete="email">
         </div>
         <div class="field" id="passwordField">
             <label>密码</label>
@@ -1006,13 +1042,28 @@
             <label>确认密码</label>
             <input type="password" id="loginConfirm" placeholder="请再次输入密码" autocomplete="new-password">
         </div>
+        <div class="field" id="otpField" style="display:none;">
+            <label>邮箱验证码</label>
+            <input type="text" id="loginOtp" placeholder="查收邮件中的 6 位验证码" autocomplete="one-time-code" spellcheck="false">
+        </div>
         <button class="btn-login" id="loginBtn" onclick="handleLogin()">登 录</button>
         <div class="error-msg" id="loginError"></div>
         <div class="switch-mode">
             <span id="switchText">没有账号？</span>
             <a id="switchLink" onclick="toggleLoginMode()">注册</a>
         </div>
-        <div class="logout-hint">数据仅存储在浏览器本地，请保管好密码</div>
+        <div class="logout-hint" id="loginHint">提示：不登录也可使用，笔记保存在本机浏览器（仅本设备）</div>
+        <div class="cloud-guide">
+            <a onclick="toggleCloudGuide()" style="cursor:pointer;text-decoration:underline;">💡 如何获取 CloudBase 环境 ID？</a>
+            <div id="cloudGuideDetail" style="display:none;margin-top:8px;text-align:left;font-size:12px;color:var(--text3);line-height:1.7;">
+                1. 打开 <a href="https://console.cloud.tencent.com/tcb" target="_blank" style="color:var(--accent-personal);">腾讯云 CloudBase 控制台</a>，用微信扫码/QQ 登录<br>
+                2. 按提示开通一个免费环境，记下页面上的「环境 ID」（形如 my-notes-xxxx）<br>
+                3. 在「环境配置 → 安全配置 → Web 安全域名」添加本站域名<br>
+                4. 在「环境配置 → 登录方式」开启「用户名密码登录」<br>
+                5. 把环境 ID 填入上方输入框，即可注册账号实现多端同步
+            </div>
+        </div>
+        <div class="skip-login" onclick="skipLogin()">跳过，先本地使用 →</div>
     </div>
 </div>
 
@@ -1022,7 +1073,7 @@
         <div class="sidebar-header">
             <span class="logo">📒 云笔记</span>
             <div style="display:flex;align-items:center;gap:8px;">
-                <span class="user-badge" id="userBadge" onclick="handleLogout()" title="点击退出登录"></span>
+                <span class="user-badge" id="userBadge" onclick="openLogin()" title="登录以启用多端同步"></span>
                 <button class="theme-toggle" onclick="toggleTheme()" title="切换主题">🌓</button>
             </div>
         </div>
@@ -1090,6 +1141,7 @@
                 <button class="back-btn-mobile" onclick="closeEditor()">←</button>
                 <input type="text" class="title-input" id="titleInput" placeholder="笔记标题..." oninput="onContentChange()">
                 <div class="toolbar-actions">
+                    <button class="btn save-btn" onclick="forceSave()" title="立即保存到本机与云端 (Ctrl+S)">💾 保存</button>
                     <button class="btn" id="pinBtn" onclick="togglePin()">📌 置顶</button>
                     <button class="btn" onclick="togglePreview()" id="previewBtn">👁 预览</button>
                     <button class="btn" onclick="exportNote()">📥 导出</button>
@@ -1180,7 +1232,35 @@
         <!-- 设置 -->
         <div class="widget-section">
             <div class="widget-section-title"><span class="dot" style="background:var(--text3)"></span>设置</div>
-            <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">天气数据来源</div>
+            <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">保存与同步</div>
+            <div style="background:var(--surface2);padding:12px;border-radius:var(--radius-xs);">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:13px;color:var(--text);font-weight:600;">自动保存</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="autoSaveToggle" onchange="saveAutoSavePrefs()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div style="font-size:11px;color:var(--text3);margin-top:6px;">开启后编辑内容自动保存，防止丢失</div>
+                <div style="margin-top:10px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;">
+                    保存间隔
+                    <select id="autoSaveInterval" onchange="saveAutoSavePrefs()" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;">
+                        <option value="30">30 秒</option>
+                        <option value="60">1 分钟</option>
+                        <option value="300">5 分钟</option>
+                    </select>
+                </div>
+            </div>
+            <div style="background:var(--surface2);padding:12px;border-radius:var(--radius-xs);margin-top:8px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:13px;color:var(--text);font-weight:600;">🌩 云端同步</span>
+                    <span id="cloudStatus" style="font-size:11px;color:var(--text3);">未连接</span>
+                </div>
+                <input type="text" id="envIdSetting" placeholder="CloudBase 环境 ID（可留空）" spellcheck="false" style="width:100%;margin-top:8px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;">
+                <button onclick="saveEnvConfig()" style="margin-top:8px;width:100%;padding:6px 0;background:var(--surface);color:var(--text2);border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">保存配置</button>
+                <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;">登录账号后，笔记自动同步到云端，换设备也能看到</div>
+            </div>
+            <div style="font-size:12px;color:var(--text2);margin:12px 0 8px;">天气数据来源</div>
             <div style="background:var(--surface2);padding:12px;border-radius:var(--radius-xs);display:flex;align-items:center;gap:10px;">
                 <span style="font-size:20px;">🌍</span>
                 <div style="flex:1;">
@@ -1208,13 +1288,21 @@
 // ═══════════════════════════════════════
 const STORAGE_KEY = 'cloud_notes_v2';
 const THEME_KEY = 'cloud_notes_theme';
-const AUTH_KEY = 'cloud_notes_auth';
 const TEST_KEY = 'cloud_notes_tests';
+const ENV_KEY = 'cloud_notes_env';
+const AUTO_SAVE_KEY = 'cloud_notes_autosave';
+const CLOUD_COLLECTION = 'notes';
 const TAG_COLORS = ['#6c5ce7','#00b4d8','#ff6b6b','#ffd93d','#22c55e','#f472b6','#a78bfa','#fb923c'];
 
 let isRegisterMode = false;
 let isLoggedIn = false;
 let currentUser = '';
+let cloudApp = null;
+let cloudDb = null;
+let cloudDocId = null;
+let syncing = false;
+let pendingSignUp = null;
+let autoSaveTimer = null;
 
 let notes = [];
 let tests = [];
@@ -1226,6 +1314,28 @@ let previewVisible = false;
 let multiSelectMode = false;
 let selectedIds = new Set();
 
+// ── 自动保存设置 ──
+function getAutoSavePrefs() {
+    try { return JSON.parse(localStorage.getItem(AUTO_SAVE_KEY)) || { enabled: true, interval: 30 }; }
+    catch { return { enabled: true, interval: 30 }; }
+}
+function saveAutoSavePrefs() {
+    const enabled = document.getElementById('autoSaveToggle').checked;
+    const interval = +document.getElementById('autoSaveInterval').value;
+    localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify({ enabled, interval }));
+    if (enabled) scheduleAutoSave(); else clearTimeout(autoSaveTimer);
+    toast(enabled ? '自动保存已开启（' + interval + '秒）' : '自动保存已关闭');
+}
+function scheduleAutoSave() {
+    clearTimeout(autoSaveTimer);
+    const pref = getAutoSavePrefs();
+    if (!pref.enabled) return;
+    autoSaveTimer = setTimeout(() => {
+        if (currentNoteId) forceSave(true);
+        scheduleAutoSave();
+    }, pref.interval * 1000);
+}
+
 function loadNotes() {
     try {
         notes = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
@@ -1236,11 +1346,99 @@ function loadNotes() {
         if (!n.tags) n.tags = [];
         if (!n.color) n.color = null;
     });
-    if (!notes.length) seedDemos();
+    // 仅在从未初始化时生成示例笔记，用户删光后不再出现
+    if (!notes.length && !localStorage.getItem('cloud_notes_inited')) {
+        seedDemos();
+        localStorage.setItem('cloud_notes_inited', '1');
+    }
 }
 
-function saveNotes() {
+function saveNotes(silent) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+    if (!silent) scheduleAutoSave();
+    syncToCloud();
+}
+
+// ── CloudBase 初始化与云端同步 ──
+function getEnvId() {
+    return (localStorage.getItem(ENV_KEY) || '').trim();
+}
+function saveEnvConfig() {
+    const v = document.getElementById('envIdSetting').value.trim();
+    localStorage.setItem(ENV_KEY, v);
+    if (v) {
+        initCloud();
+        toast('云环境配置已保存');
+    } else {
+        toast('已清除云环境配置（本地模式）');
+    }
+    updateCloudStatus();
+}
+function initCloud() {
+    if (typeof cloudbase === 'undefined') return false;
+    const env = getEnvId();
+    if (!env) { cloudApp = null; cloudDb = null; return false; }
+    if (cloudApp) return true;
+    try {
+        cloudApp = cloudbase.init({ env });
+        cloudDb = cloudApp.database();
+        return true;
+    } catch (e) {
+        console.error('CloudBase 初始化失败', e);
+        return false;
+    }
+}
+function safeParse(s, fallback) {
+    try { return JSON.parse(s); } catch { return fallback; }
+}
+function updateCloudStatus() {
+    const el = document.getElementById('cloudStatus');
+    if (!el) return;
+    if (!isLoggedIn) { el.textContent = '未登录'; el.style.color = 'var(--text3)'; return; }
+    if (getEnvId()) { el.textContent = '已同步 ✓'; el.style.color = 'var(--success)'; }
+    else { el.textContent = '未配置环境'; el.style.color = 'var(--danger)'; }
+}
+async function syncToCloud() {
+    if (!isLoggedIn || !initCloud() || syncing) return;
+    syncing = true;
+    try {
+        const nowTs = Date.now();
+        const localMax = notes.reduce((m, n) => Math.max(m, n.updatedAt || 0), nowTs);
+        const q = await cloudDb.collection(CLOUD_COLLECTION).limit(1).get();
+        const doc = q.data && q.data[0];
+        if (!doc) {
+            // 云端无数据 → 上传本地笔记
+            if (notes.length) {
+                const add = await cloudDb.collection(CLOUD_COLLECTION).add({ data: JSON.stringify(notes), updatedAt: nowTs });
+                cloudDocId = add.id;
+            }
+        } else {
+            cloudDocId = doc._id;
+            const cloudTs = doc.updatedAt || 0;
+            if (cloudTs > localMax) {
+                // 云端较新 → 下载并合并到本地
+                const cloudNotes = safeParse(doc.data, []);
+                if (Array.isArray(cloudNotes)) {
+                    notes = cloudNotes;
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+                    renderNoteList();
+                    if (currentNoteId) {
+                        const n = notes.find(x => x.id === currentNoteId);
+                        if (n) openNote(n.id); else closeEditor();
+                    }
+                    toast('已从云端同步最新笔记');
+                }
+            } else if (localMax > cloudTs && notes.length) {
+                // 本地较新 → 上传
+                await cloudDb.collection(CLOUD_COLLECTION).doc(cloudDocId).update({ data: JSON.stringify(notes), updatedAt: nowTs });
+            }
+        }
+        updateCloudStatus();
+    } catch (e) {
+        console.error('云端同步失败', e);
+    } finally {
+        syncing = false;
+    }
 }
 
 function genId() { return 'n_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6); }
@@ -1273,14 +1471,17 @@ function toggleTheme() {
 // ═══════════════════════════════════════
 // 板块 & 视图
 // ═══════════════════════════════════════
-function switchSection(section) {
-    currentSection = section;
+function updateSectionUI(section) {
     const swiper = document.getElementById('sectionSwiper');
     swiper.className = 'section-swiper ' + section;
     swiper.querySelectorAll('button').forEach((b, i) => {
         b.classList.toggle('active', (i === 0 && section === 'personal') || (i === 1 && section === 'work'));
     });
     document.getElementById('newNoteBtn').className = 'new-note-fab' + (section === 'work' ? ' work-hover' : '');
+}
+function switchSection(section) {
+    currentSection = section;
+    updateSectionUI(section);
     document.getElementById('searchInput').value = '';
     currentNoteId = null;
     multiSelectMode = false; selectedIds.clear();
@@ -1466,7 +1667,9 @@ function openNote(id) {
     currentNoteId = id;
     currentSection = note.section;
 
-    switchSection(note.section);
+    // 仅同步分区高亮，不清空当前编辑状态
+    updateSectionUI(note.section);
+    document.getElementById('searchInput').value = '';
     document.getElementById('editorEmpty').style.display = 'none';
     document.getElementById('editorPanel').style.display = 'flex';
     document.getElementById('titleInput').value = note.title;
@@ -1500,14 +1703,20 @@ function onContentChange() {
 
     const dot = document.getElementById('saveDot');
     const status = document.getElementById('saveStatus');
-    dot.classList.add('saving'); status.textContent = '保存中...';
-
     if (previewVisible) renderPreview();
 
+    // 自动保存关闭 → 仅标记未保存状态，等待手动保存
+    if (!getAutoSavePrefs().enabled) {
+        dot.classList.remove('saving'); dot.classList.add('unsaved');
+        status.textContent = '● 未保存';
+        return;
+    }
+
+    dot.classList.add('saving'); status.textContent = '保存中...';
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
         saveNotes();
-        dot.classList.remove('saving');
+        dot.classList.remove('saving', 'unsaved');
         status.textContent = '已保存 ' + fmtTime(Date.now());
         updateMeta(note);
         renderNoteList();
@@ -1777,7 +1986,7 @@ document.addEventListener('keydown', e => {
     if (e.key === 'ArrowDown' && (e.ctrlKey || e.metaKey) && !isInput) { e.preventDefault(); navigateNote(1); }
 });
 
-function forceSave() {
+function forceSave(silent) {
     if (!currentNoteId) return;
     const note = notes.find(n => n.id === currentNoteId);
     if (!note) return;
@@ -1785,11 +1994,11 @@ function forceSave() {
     note.content = document.getElementById('contentInput').value;
     note.updatedAt = Date.now();
     saveNotes();
-    document.getElementById('saveDot').classList.remove('saving');
+    document.getElementById('saveDot').classList.remove('saving', 'unsaved');
     document.getElementById('saveStatus').textContent = '已保存 ' + fmtTime(Date.now());
     updateMeta(note);
     renderNoteList();
-    toast('已手动保存');
+    if (!silent) toast(isLoggedIn ? '已保存（本机 + 云端）' : '已保存到本机');
 }
 
 function navigateNote(dir) {
@@ -1856,129 +2065,146 @@ function toast(msg) {
 }
 
 // ═══════════════════════════════════════
-// 认证系统
+// 认证系统（CloudBase 云端账号）
 // ═══════════════════════════════════════
-function hashPassword(pwd) {
-    // 使用 SHA-256 + salt 对密码进行哈希
-    const salt = 'cloud_notes_salt_2026';
-    let hash = 0;
-    const str = salt + pwd;
-    for (let i = 0; i < str.length; i++) {
-        const ch = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + ch;
-        hash |= 0;
-    }
-    return hash.toString(36);
+function openLogin() {
+    document.getElementById('envIdInput').value = getEnvId();
+    document.getElementById('loginOverlay').classList.remove('hidden');
+    setTimeout(() => { const i = document.getElementById('loginUsername'); i && i.focus(); }, 100);
 }
-
-function getAuthData() {
-    try {
-        return JSON.parse(localStorage.getItem(AUTH_KEY)) || {};
-    } catch { return {}; }
+function skipLogin() {
+    document.getElementById('loginOverlay').classList.add('hidden');
+    toast('已进入本地模式，笔记保存在本机浏览器');
 }
-
-function saveAuthData(data) {
-    localStorage.setItem(AUTH_KEY, JSON.stringify(data));
+function toggleCloudGuide() {
+    const d = document.getElementById('cloudGuideDetail');
+    d.style.display = d.style.display === 'none' ? '' : 'none';
 }
-
 function toggleLoginMode() {
     isRegisterMode = !isRegisterMode;
-    document.getElementById('loginSubtitle').textContent = isRegisterMode ? '创建账号' : '登录以继续';
-    document.getElementById('loginBtn').textContent = isRegisterMode ? '注 册' : '登 录';
-    document.getElementById('passwordField').style.display = isRegisterMode ? '' : '';
+    document.getElementById('loginSubtitle').textContent = isRegisterMode ? '创建账号 · 开启多端同步' : '登录后数据云端同步 · 多端通用';
+    document.getElementById('loginBtn').textContent = isRegisterMode ? '发 送 验 证 码' : '登 录';
+    document.getElementById('emailField').style.display = isRegisterMode ? '' : 'none';
     document.getElementById('confirmField').style.display = isRegisterMode ? '' : 'none';
+    document.getElementById('otpField').style.display = 'none';
     document.getElementById('switchText').textContent = isRegisterMode ? '已有账号？' : '没有账号？';
     document.getElementById('switchLink').textContent = isRegisterMode ? '登录' : '注册';
     document.getElementById('loginError').textContent = '';
-    document.getElementById('loginUsername').value = '';
-    document.getElementById('loginPassword').value = '';
-    document.getElementById('loginConfirm').value = '';
+    pendingSignUp = null;
 }
 
-function handleLogin() {
-    const username = document.getElementById('loginUsername').value.trim();
-    const password = document.getElementById('loginPassword').value;
+async function handleLogin() {
     const errorEl = document.getElementById('loginError');
+    errorEl.style.color = 'var(--danger)';
+    const env = document.getElementById('envIdInput').value.trim() || getEnvId();
+    localStorage.setItem(ENV_KEY, env);
 
-    if (!username || !password) {
-        errorEl.textContent = '请填写账号和密码';
+    if (!env) {
+        errorEl.textContent = '请先在「云环境 ID」填写你的 CloudBase 环境 ID（获取方法见网页底部提示）';
         return;
     }
-    if (username.length < 2 || username.length > 20) {
-        errorEl.textContent = '账号长度为 2-20 个字符';
+    if (!initCloud()) {
+        errorEl.textContent = '云环境 ID 无效，或云端 SDK 加载失败（请检查网络）';
         return;
     }
-    if (password.length < 4) {
-        errorEl.textContent = '密码至少需要 4 位';
-        return;
-    }
-
-    const authData = getAuthData();
+    const auth = cloudApp.auth();
 
     if (isRegisterMode) {
+        // ── 注册：发送验证码 → 输入验证码完成 ──
+        if (pendingSignUp) {
+            const otp = document.getElementById('loginOtp').value.trim();
+            if (!otp) { errorEl.textContent = '请输入邮箱收到的验证码'; return; }
+            try {
+                await pendingSignUp.verifyOtp({ token: otp });
+                pendingSignUp = null;
+                errorEl.textContent = '';
+                await completeLogin(document.getElementById('loginUsername').value.trim(), true);
+            } catch (e) {
+                errorEl.textContent = '验证码错误或已过期，请重试';
+            }
+            return;
+        }
+        const email = document.getElementById('loginEmail').value.trim();
+        const username = document.getElementById('loginUsername').value.trim();
+        const password = document.getElementById('loginPassword').value;
         const confirm = document.getElementById('loginConfirm').value;
-        if (password !== confirm) {
-            errorEl.textContent = '两次输入的密码不一致';
+        if (!email || !/^\S+@\S+\.\S+$/.test(email)) { errorEl.textContent = '请输入正确的邮箱地址'; return; }
+        if (username.length < 2 || username.length > 20) { errorEl.textContent = '账号长度为 2-20 个字符'; return; }
+        if (password.length < 6) { errorEl.textContent = '密码至少需要 6 位'; return; }
+        if (password !== confirm) { errorEl.textContent = '两次输入的密码不一致'; return; }
+        try {
+            const { data, error } = await auth.signUp({ email, password, username });
+            if (error) { errorEl.textContent = '注册失败：' + error.message; return; }
+            pendingSignUp = data;
+            document.getElementById('otpField').style.display = '';
+            document.getElementById('loginBtn').textContent = '完 成 注 册';
+            errorEl.textContent = '验证码已发送至 ' + email + '，请查收邮件';
+            errorEl.style.color = 'var(--success)';
+        } catch (e) {
+            errorEl.textContent = '注册失败：' + e.message;
+        }
+        return;
+    }
+
+    // ── 登录 ──
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if (!username || !password) { errorEl.textContent = '请填写账号和密码'; return; }
+    try {
+        const { error } = await auth.signInWithPassword({ username, password });
+        if (error) {
+            errorEl.textContent = error.code === 'not_found' ? '账号不存在，请先注册' :
+                (error.code === 'invalid_password' ? '密码错误' : ('登录失败：' + error.message));
             return;
         }
-        if (authData[username]) {
-            errorEl.textContent = '该账号已存在，请直接登录';
-            return;
-        }
-        // 注册新用户
-        authData[username] = { hash: hashPassword(password), createdAt: Date.now() };
-        saveAuthData(authData);
         errorEl.textContent = '';
-        completeLogin(username);
-        toast('注册成功，欢迎使用云笔记！');
-    } else {
-        // 登录
-        if (!authData[username]) {
-            errorEl.textContent = '账号不存在，请先注册';
-            return;
-        }
-        if (authData[username].hash !== hashPassword(password)) {
-            errorEl.textContent = '密码错误';
-            return;
-        }
-        errorEl.textContent = '';
-        completeLogin(username);
+        await completeLogin(username);
+    } catch (e) {
+        errorEl.textContent = '登录失败：' + e.message;
     }
 }
 
-function completeLogin(username) {
+async function completeLogin(username, isNew) {
     isLoggedIn = true;
     currentUser = username;
-    sessionStorage.setItem('cloud_notes_session', username);
+    localStorage.setItem('cloud_notes_user', username);
     document.getElementById('loginOverlay').classList.add('hidden');
-    document.getElementById('userBadge').textContent = '👤 ' + username;
+    const badge = document.getElementById('userBadge');
+    badge.textContent = '👤 ' + username + ' ⏻';
+    badge.classList.add('logged-in');
+    badge.title = '点击退出登录';
+    badge.onclick = handleLogout;
     loadNotes();
-    loadTests();
-    switchSection('personal');
-    renderTestList();
-    initWeather();
-    toast('欢迎回来，' + username + '！Ctrl+N 新建 · 右键快捷操作');
+    await syncToCloud();
+    renderNoteList();
+    if (currentNoteId) {
+        const n = notes.find(x => x.id === currentNoteId);
+        if (n) openNote(n.id); else closeEditor();
+    }
+    updateCloudStatus();
+    toast(isNew ? '注册成功，欢迎使用云笔记！' : '欢迎回来，' + username + '！笔记已同步');
 }
 
 function handleLogout() {
-    if (confirm('确定要退出登录吗？数据不会丢失。')) {
-        isLoggedIn = false;
-        currentUser = '';
-        sessionStorage.removeItem('cloud_notes_session');
-        document.getElementById('loginOverlay').classList.remove('hidden');
-        document.getElementById('userBadge').textContent = '';
-        closeEditor();
-        isRegisterMode = false;
-        toggleLoginMode(); toggleLoginMode();
-        document.getElementById('loginUsername').value = '';
-        document.getElementById('loginPassword').value = '';
-        document.getElementById('loginError').textContent = '';
-    }
+    if (!confirm('确定退出登录吗？本机笔记仍会保留。')) return;
+    isLoggedIn = false;
+    currentUser = '';
+    pendingSignUp = null;
+    localStorage.removeItem('cloud_notes_user');
+    try { if (cloudApp) cloudApp.auth().signOut(); } catch (e) {}
+    const badge = document.getElementById('userBadge');
+    badge.textContent = '🔑 登录';
+    badge.classList.remove('logged-in');
+    badge.title = '登录以启用多端同步';
+    badge.onclick = openLogin;
+    closeEditor();
+    updateCloudStatus();
+    toast('已退出登录，当前为本地模式');
 }
 
 // 回车键登录
 document.addEventListener('keydown', e => {
-    if (!isLoggedIn && e.key === 'Enter') {
+    if (e.key === 'Enter' && !document.getElementById('loginOverlay').classList.contains('hidden')) {
         e.preventDefault();
         handleLogin();
     }
@@ -1987,21 +2213,35 @@ document.addEventListener('keydown', e => {
 // ═══════════════════════════════════════
 // 启动
 // ═══════════════════════════════════════
-(function init() {
-    const sessionUser = sessionStorage.getItem('cloud_notes_session');
-    if (sessionUser && getAuthData()[sessionUser]) {
-        isLoggedIn = true;
-        currentUser = sessionUser;
-        document.getElementById('loginOverlay').classList.add('hidden');
-        document.getElementById('userBadge').textContent = '👤 ' + sessionUser;
-        loadNotes();
-        loadTests();
-        switchSection('personal');
-        renderTestList();
-        initWeather();
-    } else {
-        document.getElementById('loginOverlay').classList.remove('hidden');
+(async function init() {
+    loadNotes();
+    loadTests();
+    renderTestList();
+    switchSection('personal');
+    initWeather();
+
+    // 加载自动保存设置
+    const pref = getAutoSavePrefs();
+    document.getElementById('autoSaveToggle').checked = pref.enabled;
+    document.getElementById('autoSaveInterval').value = pref.interval;
+    // 加载云环境配置
+    document.getElementById('envIdSetting').value = getEnvId();
+    updateCloudStatus();
+    scheduleAutoSave();
+
+    // 尝试恢复云端登录会话
+    const savedUser = localStorage.getItem('cloud_notes_user');
+    if (savedUser && getEnvId() && initCloud()) {
+        try {
+            const { data } = await cloudApp.auth().getSession();
+            if (data && data.session) {
+                completeLogin(savedUser);
+                return;
+            }
+        } catch (e) { console.warn('恢复会话失败', e); }
     }
+    // 未登录：本地模式（不强制登录）
+    document.getElementById('userBadge').textContent = '🔑 登录';
 })();
 
 // ═══════════════════════════════════════
