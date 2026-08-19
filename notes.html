@@ -700,6 +700,70 @@
             line-height: 1.75; color: var(--text);
             background: transparent;
         }
+        /* 代码笔记模式 */
+        .editor-pane.code-mode {
+            padding: 0; overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+        .editor-pane.code-mode > textarea { display: none; }
+        .code-toolbar {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 12px; flex-shrink: 0;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+        .code-toolbar-icon { font-size: 13px; color: var(--text3); font-weight: 700; }
+        .code-toolbar select {
+            padding: 4px 8px; font-size: 12px;
+            border: 1px solid var(--border); border-radius: 6px;
+            background: var(--surface2); color: var(--text);
+            font-family: inherit; outline: none; cursor: pointer;
+        }
+        .code-toolbar select:focus { border-color: var(--accent-personal); }
+        .code-lang-badge {
+            font-size: 11px; color: var(--text3);
+            background: var(--surface2); padding: 2px 8px;
+            border-radius: 10px; white-space: nowrap;
+        }
+        .code-toolbar-tip { margin-left: auto; font-size: 11px; color: var(--text3); white-space: nowrap; }
+        .code-editor-wrap {
+            flex: 1; min-height: 0; position: relative;
+            display: flex; flex-direction: column;
+        }
+        .code-editor-wrap > #codeEditor { flex: 1; min-height: 0; }
+        .monaco-loading {
+            position: absolute; inset: 0; z-index: 2;
+            display: flex; align-items: center; justify-content: center;
+            gap: 8px; color: var(--text3); font-size: 13px;
+            background: var(--surface);
+        }
+        .code-preview-wrap { height: 100%; }
+        .code-preview-wrap > #codePreview { height: 100%; }
+        .editor-pane.code-preview-active { padding: 0; overflow: hidden; }
+        .code-plain {
+            white-space: pre; overflow: auto; font-size: 12px;
+            font-family: var(--font-mono); line-height: 1.7; color: var(--text);
+        }
+        /* 类型切换 */
+        .type-switch {
+            display: flex; background: var(--surface2);
+            border-radius: 8px; padding: 2px; flex-shrink: 0;
+        }
+        .type-switch button {
+            border: none; background: transparent; cursor: pointer;
+            padding: 5px 10px; border-radius: 6px;
+            font-size: 12px; font-weight: 600; color: var(--text2);
+            font-family: inherit; white-space: nowrap;
+            transition: all var(--transition-fast);
+        }
+        .type-switch button:hover { color: var(--text); }
+        .type-switch button.active { background: var(--accent-personal); color: #fff; }
+        .code-type-badge {
+            font-size: 10px; font-weight: 700; color: #7c3aed;
+            background: #ede9fe; border-radius: 4px;
+            padding: 1px 5px; margin-right: 6px;
+            font-family: var(--font-mono); vertical-align: 2px;
+        }
         .editor-pane textarea::placeholder { color: var(--text3); }
         .editor-pane .md-preview {
             font-size: 14px; line-height: 1.75;
@@ -1140,6 +1204,10 @@
             <div class="editor-toolbar">
                 <button class="back-btn-mobile" onclick="closeEditor()">←</button>
                 <input type="text" class="title-input" id="titleInput" placeholder="笔记标题..." oninput="onContentChange()">
+                <div class="type-switch" id="typeSwitch">
+                    <button id="typeTextBtn" class="active" onclick="switchNoteType('text')" title="文本 / Markdown 笔记">📝 文本</button>
+                    <button id="typeCodeBtn" onclick="switchNoteType('code')" title="代码笔记：语法高亮 + VS Code 快捷键">⟨/⟩ 代码</button>
+                </div>
                 <div class="toolbar-actions">
                     <button class="btn save-btn" onclick="forceSave()" title="立即保存到本机与云端 (Ctrl+S)">💾 保存</button>
                     <button class="btn" id="pinBtn" onclick="togglePin()">📌 置顶</button>
@@ -1155,10 +1223,21 @@
             <!-- 双栏编辑 -->
             <div class="editor-body" id="editorBody">
                 <div class="editor-pane" id="editPane">
+                    <div class="code-toolbar" id="codeToolbar" style="display:none;">
+                        <span class="code-toolbar-icon">⟨/⟩</span>
+                        <select id="langSelect" onchange="changeLang(this.value)"></select>
+                        <span class="code-lang-badge" id="codeLangBadge"></span>
+                        <span class="code-toolbar-tip">⌘/Ctrl 快捷键同 VS Code</span>
+                    </div>
+                    <div class="code-editor-wrap" id="codeEditorWrap" style="display:none;">
+                        <div id="codeEditor"></div>
+                        <div class="monaco-loading" id="monacoLoading" style="display:none;">⏳ 正在加载代码编辑器…</div>
+                    </div>
                     <textarea id="contentInput" placeholder="支持 Markdown 语法..." oninput="onContentChange()"></textarea>
                 </div>
                 <div class="editor-pane" id="previewPane" style="display:none;">
                     <div class="md-preview" id="mdPreview"></div>
+                    <div class="code-preview-wrap" id="codePreviewWrap" style="display:none;"><div id="codePreview"></div></div>
                 </div>
             </div>
 
@@ -1303,6 +1382,9 @@ let cloudDocId = null;
 let syncing = false;
 let pendingSignUp = null;
 let autoSaveTimer = null;
+let monacoEditor = null;
+let monacoPreviewEditor = null;
+let monacoLoadPromise = null;
 
 let notes = [];
 let tests = [];
@@ -1345,6 +1427,8 @@ function loadNotes() {
         if (!n.pinned) n.pinned = false;
         if (!n.tags) n.tags = [];
         if (!n.color) n.color = null;
+        if (!n.type) n.type = 'text';
+        if (!n.lang) n.lang = '';
     });
     // 仅在从未初始化时生成示例笔记，用户删光后不再出现
     if (!notes.length && !localStorage.getItem('cloud_notes_inited')) {
@@ -1448,7 +1532,8 @@ function seedDemos() {
         { id: genId(), title: '超市购物清单', content: '牛奶 x2\n鸡蛋 x1\n全麦面包\n香蕉\n洗衣液', section: 'personal', createdAt: Date.now() - 864e5, updatedAt: Date.now() - 864e5, pinned: false, tags: ['日常'], color: null },
         { id: genId(), title: '周末计划', content: '1. 整理书房\n2. 给爸妈打电话\n3. 健身房 下午3点\n4. 看《三体》第5章', section: 'personal', createdAt: Date.now() - 1728e5, updatedAt: Date.now() - 1e8, pinned: true, tags: ['生活','健康'], color: null },
         { id: genId(), title: '周会纪要 08/11', content: '## 本周重点\n- SRM 对接进度 **80%**\n- 采购计划模块联调\n- 乐仁堂数据迁移方案确认\n\n## 待办\n- [ ] 京万红接口文档\n- [ ] MRP 运算逻辑校验\n- [x] 测试环境搭建\n- [ ] 周五前提交测试报告\n\n> 注意：受托一定不要手动下达', section: 'work', createdAt: Date.now() - 36e5, updatedAt: Date.now() - 36e5, pinned: false, tags: ['会议','SRM'], color: null },
-        { id: genId(), title: '采购流程优化思路', content: '1. 受托采购订单自动化下达\n2. 库存预警 + 自动补货\n3. 到货检验流程简化\n   - 乐仁堂：反生成检验结果\n   - 京万红：编制状态报告打印\n4. 内包流程独立管理\n\n`注意检查 MRP 参数配置`', section: 'work', createdAt: Date.now() - 72e5, updatedAt: Date.now() - 72e5, pinned: true, tags: ['优化','采购'], color: null }
+        { id: genId(), title: '采购流程优化思路', content: '1. 受托采购订单自动化下达\n2. 库存预警 + 自动补货\n3. 到货检验流程简化\n   - 乐仁堂：反生成检验结果\n   - 京万红：编制状态报告打印\n4. 内包流程独立管理\n\n`注意检查 MRP 参数配置`', section: 'work', createdAt: Date.now() - 72e5, updatedAt: Date.now() - 72e5, pinned: true, tags: ['优化','采购'], color: null },
+        { id: genId(), title: '示例：fetch 请求封装', content: '// 统一的 fetch 请求封装\nconst BASE_URL = "https://api.example.com";\n\nasync function request(path, options = {}) {\n  const res = await fetch(BASE_URL + path, {\n    method: options.method || "GET",\n    headers: { "Content-Type": "application/json", ...(options.headers || {}) },\n    body: options.body ? JSON.stringify(options.body) : undefined,\n  });\n  if (!res.ok) throw new Error("HTTP " + res.status);\n  return res.json();\n}\n\nexport { request };', section: 'work', createdAt: Date.now() - 6e6, updatedAt: Date.now() - 6e6, pinned: false, tags: ['示例','代码'], color: null, type: 'code', lang: 'javascript' }
     ];
     saveNotes();
 }
@@ -1461,6 +1546,7 @@ function toggleTheme() {
     const next = current === 'dark' ? 'light' : 'dark';
     document.body.setAttribute('data-theme', next);
     localStorage.setItem(THEME_KEY, next);
+    if (window.monaco) monaco.editor.setTheme(next === 'dark' ? 'vs-dark' : 'vs');
 }
 
 (function initTheme() {
@@ -1579,13 +1665,14 @@ function buildCardHtml(n, i) {
         `<span class="tag-dot" style="background:${TAG_COLORS[ti % TAG_COLORS.length]}"></span>`
     ).join('');
     const pinHtml = n.pinned ? '<span class="pin-star">⭐</span>' : '';
+    const codeBadge = n.type === 'code' ? '<span class="code-type-badge">⟨/⟩</span>' : '';
 
     return `<div class="note-card flip-item${activeCls}${selCls}" data-id="${n.id}"
         style="animation-delay:${i * 35}ms;${n.color ? 'border-left:3px solid '+n.color : ''}">
         <div class="check-circle">✓</div>
         ${pinHtml}
         <div class="card-body">
-            <div class="card-title">${tagsHtml}${escHtml(n.title) || '无标题'}</div>
+            <div class="card-title">${codeBadge}${tagsHtml}${escHtml(n.title) || '无标题'}</div>
             <div class="card-preview">${escHtml(preview)}</div>
             <div class="card-meta"><span>${timeStr}</span><span>${charCount(n.content)}字</span></div>
         </div>
@@ -1652,7 +1739,7 @@ function createNote() {
     const note = {
         id: genId(), title: '', content: '', section: currentSection,
         createdAt: Date.now(), updatedAt: Date.now(),
-        pinned: false, tags: [], color: null
+        pinned: false, tags: [], color: null, type: 'text', lang: ''
     };
     notes.unshift(note);
     saveNotes();
@@ -1674,6 +1761,8 @@ function openNote(id) {
     document.getElementById('editorPanel').style.display = 'flex';
     document.getElementById('titleInput').value = note.title;
     document.getElementById('contentInput').value = note.content;
+    updateTypeBtns(note.type);
+    applyEditorMode(note);
 
     document.getElementById('pinBtn').className = 'btn' + (note.pinned ? ' pinned' : '');
     document.getElementById('pinBtn').textContent = note.pinned ? '⭐ 已置顶' : '📌 置顶';
@@ -1687,6 +1776,7 @@ function openNote(id) {
 
 function closeEditor() {
     currentNoteId = null;
+    disposeMonacoEditor();
     document.getElementById('editorEmpty').style.display = 'flex';
     document.getElementById('editorPanel').style.display = 'none';
     document.getElementById('editorArea').classList.remove('mobile-show');
@@ -1698,7 +1788,7 @@ function onContentChange() {
     const note = notes.find(n => n.id === currentNoteId);
     if (!note) return;
     note.title = document.getElementById('titleInput').value;
-    note.content = document.getElementById('contentInput').value;
+    note.content = getActiveContent();
     note.updatedAt = Date.now();
 
     const dot = document.getElementById('saveDot');
@@ -1781,7 +1871,20 @@ function togglePreview() {
 }
 
 function renderPreview() {
-    const content = document.getElementById('contentInput').value;
+    const content = getActiveContent();
+    const note = currentNoteId ? notes.find(n => n.id === currentNoteId) : null;
+    const pv = document.getElementById('previewPane');
+    if (note && note.type === 'code') {
+        pv.classList.add('code-preview-active');
+        document.getElementById('mdPreview').style.display = 'none';
+        const wrap = document.getElementById('codePreviewWrap');
+        wrap.style.display = 'block';
+        renderCodePreview(note, content);
+        return;
+    }
+    pv.classList.remove('code-preview-active');
+    document.getElementById('codePreviewWrap').style.display = 'none';
+    document.getElementById('mdPreview').style.display = 'block';
     document.getElementById('mdPreview').innerHTML = parseMarkdown(content);
 }
 
@@ -1925,6 +2028,17 @@ function exportNote() {
     if (!currentNoteId) return;
     const note = notes.find(n => n.id === currentNoteId);
     if (!note) return;
+    if (note.type === 'code') {
+        const ext = LANG_EXT[normalizeLang(note.lang || '')] || 'txt';
+        const blob = new Blob([note.content], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = ((note.title || '代码') + '.' + ext);
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast('已导出代码文件 .' + ext);
+        return;
+    }
     const text = `# ${note.title}\n\n${note.content}\n\n---\n创建: ${new Date(note.createdAt).toLocaleString()}\n更新: ${new Date(note.updatedAt).toLocaleString()}`;
     const blob = new Blob([text], { type: 'text/markdown' });
     const a = document.createElement('a');
@@ -1970,6 +2084,9 @@ document.addEventListener('keydown', e => {
         return;
     }
     const isInput = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+    // 焦点在 Monaco 代码编辑器内时，将快捷键交给编辑器自身处理（VS Code 风格）
+    const inMonaco = document.activeElement && document.activeElement.closest && document.activeElement.closest('.monaco-editor');
+    if (inMonaco && (e.ctrlKey || e.metaKey) && ['1','2','f','a','p','h','d','l','g','r'].includes(e.key.toLowerCase())) return;
 
     if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); createNote(); }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') { e.preventDefault(); togglePreview(); }
@@ -1991,7 +2108,7 @@ function forceSave(silent) {
     const note = notes.find(n => n.id === currentNoteId);
     if (!note) return;
     note.title = document.getElementById('titleInput').value;
-    note.content = document.getElementById('contentInput').value;
+    note.content = getActiveContent();
     note.updatedAt = Date.now();
     saveNotes();
     document.getElementById('saveDot').classList.remove('saving', 'unsaved');
@@ -2006,6 +2123,274 @@ function navigateNote(dir) {
     const idx = filtered.findIndex(n => n.id === currentNoteId);
     const next = filtered[idx + dir];
     if (next) openNote(next.id);
+}
+
+// ═══════════════════════════════════════
+// 代码编辑器（Monaco · VS Code 同源内核）
+// ═══════════════════════════════════════
+const MONACO_CDNS = [
+    'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs',
+    'https://cdn.staticfile.net/monaco-editor/0.52.2/min/vs',
+    'https://unpkg.com/monaco-editor@0.52.2/min/vs'
+];
+const LANG_LIST = [
+    ['javascript','JavaScript'], ['typescript','TypeScript'], ['python','Python'],
+    ['html','HTML'], ['css','CSS'], ['scss','SCSS'], ['less','Less'],
+    ['json','JSON'], ['jsonc','JSONC'], ['java','Java'], ['c','C'],
+    ['cpp','C++'], ['csharp','C#'], ['go','Go'], ['rust','Rust'],
+    ['sql','SQL'], ['shell','Shell (Bash)'], ['php','PHP'], ['ruby','Ruby'],
+    ['swift','Swift'], ['kotlin','Kotlin'], ['markdown','Markdown'],
+    ['yaml','YAML'], ['xml','XML'], ['plaintext','纯文本']
+];
+const LANG_EXT = {
+    javascript:'js', typescript:'ts', python:'py', html:'html', css:'css',
+    scss:'scss', less:'less', json:'json', jsonc:'jsonc', java:'java', c:'c',
+    cpp:'cpp', csharp:'cs', go:'go', rust:'rs', sql:'sql', shell:'sh',
+    php:'php', ruby:'rb', swift:'swift', kotlin:'kt', markdown:'md',
+    yaml:'yml', xml:'xml', plaintext:'txt'
+};
+const LANG_ALIAS = {
+    js:'javascript', ts:'typescript', py:'python', bash:'shell', sh:'shell',
+    yml:'yaml', md:'markdown', txt:'plaintext', cs:'csharp', rb:'ruby',
+    kt:'kotlin', jsx:'javascript', tsx:'typescript', vue:'html', 'c++':'cpp',
+    h:'c', hpp:'cpp', ps1:'shell', dockerfile:'plaintext', ini:'plaintext'
+};
+
+function loadMonaco() {
+    if (window.monaco) return Promise.resolve(window.monaco);
+    if (monacoLoadPromise) return monacoLoadPromise;
+    monacoLoadPromise = new Promise((resolve, reject) => {
+        let i = 0;
+        (function tryNext() {
+            if (i >= MONACO_CDNS.length) { reject(new Error('Monaco CDN 全部不可用')); return; }
+            const base = MONACO_CDNS[i++];
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = base + '/editor/editor.main.css';
+            document.head.appendChild(link);
+            const s = document.createElement('script');
+            s.src = base + '/loader.js';
+            s.onload = () => {
+                try {
+                    window.require.config({ paths: { vs: base } });
+                    window.require(['vs/editor/editor.main'], () => resolve(window.monaco), () => tryNext());
+                } catch (e) { tryNext(); }
+            };
+            s.onerror = () => tryNext();
+            document.head.appendChild(s);
+        })();
+    });
+    return monacoLoadPromise;
+}
+
+function normalizeLang(lang) {
+    if (LANG_LIST.some(l => l[0] === lang)) return lang;
+    if (LANG_ALIAS[lang]) return LANG_ALIAS[lang];
+    return 'plaintext';
+}
+
+function getLangLabel(lang) {
+    const f = LANG_LIST.find(l => l[0] === lang);
+    return f ? f[1] : '纯文本';
+}
+
+function detectLanguage(content) {
+    const s = (content || '').slice(0, 4000);
+    const fence = /^\s*```(\w+)/m.exec(s);
+    if (fence && fence[1]) return normalizeLang(fence[1].toLowerCase());
+    if (/^\s*<\?php/.test(s)) return 'php';
+    if (/^\s*<!DOCTYPE html>/i.test(s) || /<html[\s>]/i.test(s)) return 'html';
+    if (/^\s*#include\s*[<"][^>"]+>/.test(s)) return 'cpp';
+    if (/^\s*(package\s+[\w.]+;|import\s+(java|javax)\.)/.test(s) || /public\s+(static\s+)?(class|interface)\s+\w+/.test(s)) return 'java';
+    if (/^\s*(use\s+[\w:]+;|fn\s+\w+\s*\()/m.test(s)) return 'rust';
+    if (/^\s*(package\s+main|func\s+\w+\s*\()/m.test(s)) return 'go';
+    if (/(def\s+\w+\s*\([^)]*\)\s*:|^\s*from\s+\w+\s+import\s+|^\s*import\s+\w+\s*$)/m.test(s)) return 'python';
+    if (/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE\s+TABLE|ALTER\s+TABLE)\b/i.test(s)) return 'sql';
+    if (/^\s*#!\s*\/.*(bash|zsh|sh)/.test(s)) return 'shell';
+    if (/^\s*\.\w+\s*\{/.test(s) || /^\s*[a-z][\w-]*\s*\{\s*$/.test(s)) return 'css';
+    if (/^\s*\{[\s\n]*["'][\w-]+["']\s*:/m.test(s)) return 'json';
+    if (/^\s*(interface\s+\w+|type\s+\w+\s*=|export\s+(default|interface|type)|import\s+\w+\s+from)/m.test(s)) return 'typescript';
+    if (/^\s*(const|let|var|function|async\s+function|console\.log|=>|document\.|window\.)/m.test(s)) return 'javascript';
+    if (/^\s*(---|\+\+\+)/m.test(s) && /^\s*[\w-]+:/m.test(s)) return 'yaml';
+    if (/^\s*(#[A-Za-z]|\{\s*)$/m.test(s)) return 'plaintext';
+    return 'javascript';
+}
+
+function getActiveContent() {
+    if (currentNoteId) {
+        const note = notes.find(n => n.id === currentNoteId);
+        if (note && note.type === 'code' && monacoEditor) return monacoEditor.getValue();
+    }
+    return document.getElementById('contentInput').value;
+}
+
+function updateTypeBtns(type) {
+    document.getElementById('typeTextBtn').classList.toggle('active', type !== 'code');
+    document.getElementById('typeCodeBtn').classList.toggle('active', type === 'code');
+}
+
+function buildLangSelect() {
+    const sel = document.getElementById('langSelect');
+    sel.innerHTML = LANG_LIST.map(([id, label]) => `<option value="${id}">${label}</option>`).join('');
+}
+
+function switchNoteType(type) {
+    if (!currentNoteId) return;
+    const note = notes.find(n => n.id === currentNoteId);
+    if (!note || note.type === type) return;
+    onContentChange();
+    note.type = type;
+    if (type === 'code') note.lang = normalizeLang(note.lang || detectLanguage(note.content));
+    saveNotes();
+    updateTypeBtns(type);
+    applyEditorMode(note);
+    renderNoteList();
+    if (type === 'code') toast('已切换为代码笔记：语法高亮 + VS Code 快捷键');
+    else toast('已切换为文本笔记（Markdown）');
+}
+
+function changeLang(lang) {
+    if (!currentNoteId) return;
+    const note = notes.find(n => n.id === currentNoteId);
+    if (!note) return;
+    lang = normalizeLang(lang);
+    note.lang = lang;
+    document.getElementById('codeLangBadge').textContent = getLangLabel(lang);
+    if (monacoEditor) monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
+    note.updatedAt = Date.now();
+    saveNotes();
+    toast('语法高亮：' + getLangLabel(lang));
+}
+
+function createMonacoEditor(note) {
+    const el = document.getElementById('codeEditor');
+    if (!el) return;
+    const dark = document.body.getAttribute('data-theme') === 'dark';
+    const isMobile = window.innerWidth <= 768;
+    monacoEditor = monaco.editor.create(el, {
+        value: note.content || '',
+        language: note.lang ? normalizeLang(note.lang) : detectLanguage(note.content),
+        theme: dark ? 'vs-dark' : 'vs',
+        automaticLayout: true,
+        fontSize: 13,
+        fontFamily: "'SF Mono','JetBrains Mono','Fira Code','Consolas','Courier New',monospace",
+        lineHeight: 1.65,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        wordWrap: isMobile ? 'on' : 'off',
+        tabSize: 4,
+        insertSpaces: true,
+        renderWhitespace: 'none',
+        smoothScrolling: true,
+        cursorBlinking: 'smooth',
+        cursorSmoothCaretAnimation: 'on',
+        scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, useShadows: false },
+        padding: { top: 12, bottom: 12 },
+        quickSuggestions: { other: true, comments: false, strings: true },
+        suggestOnTriggerCharacters: true,
+        bracketPairColorization: { enabled: true },
+        guides: { indentation: true, bracketPairs: true }
+    });
+    monacoEditor.onDidChangeModelContent(() => onContentChange());
+    monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => forceSave());
+    monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyN, () => createNote());
+    setTimeout(() => monacoEditor && monacoEditor.layout(), 50);
+}
+
+function disposeMonacoEditor() {
+    if (monacoEditor) { monacoEditor.dispose(); monacoEditor = null; }
+    if (monacoPreviewEditor) { monacoPreviewEditor.dispose(); monacoPreviewEditor = null; }
+    const el = document.getElementById('codeEditor');
+    if (el) el.innerHTML = '';
+    const pv = document.getElementById('codePreview');
+    if (pv) pv.innerHTML = '';
+}
+
+function applyEditorMode(note) {
+    const editPane = document.getElementById('editPane');
+    const textarea = document.getElementById('contentInput');
+    const codeToolbar = document.getElementById('codeToolbar');
+    const codeWrap = document.getElementById('codeEditorWrap');
+    const loading = document.getElementById('monacoLoading');
+    const editorEl = document.getElementById('codeEditor');
+    const isCode = note.type === 'code';
+
+    editPane.classList.toggle('code-mode', isCode);
+    codeToolbar.style.display = isCode ? 'flex' : 'none';
+    textarea.style.display = isCode ? 'none' : 'block';
+
+    if (!isCode) {
+        codeWrap.style.display = 'none';
+        disposeMonacoEditor();
+        textarea.value = note.content;
+        return;
+    }
+
+    const lang = normalizeLang(note.lang || detectLanguage(note.content));
+    const sel = document.getElementById('langSelect');
+    if (sel.value !== lang) sel.value = lang;
+    document.getElementById('codeLangBadge').textContent = getLangLabel(lang);
+
+    codeWrap.style.display = 'flex';
+    if (window.monaco && monacoEditor) {
+        if (monacoEditor.getValue() !== note.content) monacoEditor.setValue(note.content);
+        monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
+        monaco.editor.setTheme(document.body.getAttribute('data-theme') === 'dark' ? 'vs-dark' : 'vs');
+        editorEl.style.display = 'block';
+        loading.style.display = 'none';
+        monacoEditor.layout();
+        return;
+    }
+    if (monacoEditor) { monacoEditor.dispose(); monacoEditor = null; }
+    editorEl.style.display = 'none';
+    loading.style.display = 'flex';
+    loadMonaco().then(m => {
+        const cur = notes.find(n => n.id === currentNoteId);
+        if (!cur || cur.type !== 'code') return;
+        editorEl.style.display = 'block';
+        loading.style.display = 'none';
+        createMonacoEditor(cur);
+    }).catch(() => {
+        loading.style.display = 'none';
+        editPane.classList.remove('code-mode');
+        codeToolbar.style.display = 'none';
+        codeWrap.style.display = 'none';
+        textarea.style.display = 'block';
+        toast('代码编辑器加载失败，已回退到文本编辑');
+    });
+}
+
+function renderCodePreview(note, content) {
+    const el = document.getElementById('codePreview');
+    const lang = normalizeLang(note.lang || detectLanguage(content));
+    if (window.monaco) {
+        if (!monacoPreviewEditor) {
+            monacoPreviewEditor = monaco.editor.create(el, {
+                value: content,
+                language: lang,
+                theme: document.body.getAttribute('data-theme') === 'dark' ? 'vs-dark' : 'vs',
+                readOnly: true,
+                automaticLayout: true,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                fontSize: 12,
+                fontFamily: "'SF Mono','JetBrains Mono','Fira Code','Consolas','Courier New',monospace",
+                lineHeight: 1.65,
+                wordWrap: 'off',
+                renderLineHighlight: 'none',
+                overviewRulerLanes: 0,
+                hideCursorInOverviewRuler: true,
+                contextmenu: false,
+                scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 }
+            });
+        } else {
+            if (monacoPreviewEditor.getValue() !== content) monacoPreviewEditor.setValue(content);
+            monaco.editor.setModelLanguage(monacoPreviewEditor.getModel(), lang);
+            monacoPreviewEditor.layout();
+        }
+    } else {
+        el.innerHTML = `<pre class="code-plain">${escHtml(content)}</pre>`;
+    }
 }
 
 // ═══════════════════════════════════════
@@ -2228,6 +2613,11 @@ document.addEventListener('keydown', e => {
     document.getElementById('envIdSetting').value = getEnvId();
     updateCloudStatus();
     scheduleAutoSave();
+    // 初始化代码编辑器语言列表，空闲时预加载 Monaco
+    buildLangSelect();
+    const preloadMonaco = () => loadMonaco().catch(() => {});
+    if ('requestIdleCallback' in window) requestIdleCallback(preloadMonaco, { timeout: 8000 });
+    else setTimeout(preloadMonaco, 3000);
 
     // 尝试恢复云端登录会话
     const savedUser = localStorage.getItem('cloud_notes_user');
