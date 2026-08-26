@@ -749,6 +749,35 @@
             border-radius: 10px; white-space: nowrap;
         }
         .code-toolbar-tip { margin-left: auto; font-size: 11px; color: var(--text3); white-space: nowrap; }
+        /* 文本格式化工具栏 */
+        .text-toolbar {
+            display: flex; align-items: center; gap: 4px;
+            padding: 6px 12px; flex-shrink: 0;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+        .text-toolbar.hidden { display: none; }
+        .fmt-btn {
+            min-width: 28px; height: 28px; padding: 0 6px;
+            border: 1px solid var(--border); background: var(--surface2);
+            border-radius: 6px; color: var(--text); cursor: pointer;
+            font-size: 13px; line-height: 1; display: inline-flex;
+            align-items: center; justify-content: center;
+            transition: all var(--transition-fast);
+        }
+        .fmt-btn:hover { background: var(--accent-personal); border-color: var(--accent-personal); color: #fff; }
+        .fmt-btn:active { transform: scale(0.92); }
+        .fmt-btn b { font-weight: 800; }
+        .fmt-btn s { text-decoration: line-through; }
+        .fmt-btn code { font-size: 11px; background: none; padding: 0; }
+        .fmt-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+        .fmt-color {
+            width: 28px; height: 28px; padding: 2px; border: 1px solid var(--border);
+            border-radius: 6px; background: var(--surface2); cursor: pointer;
+        }
+        .fmt-color-label { font-size: 11px; color: var(--text3); }
+        .fmt-tip { margin-left: auto; font-size: 11px; color: var(--text3); white-space: nowrap; }
+        @media (max-width: 768px) { .fmt-tip { display: none; } }
         .code-editor-wrap {
             flex: 1; min-height: 0; position: relative;
             display: flex; flex-direction: column;
@@ -1256,6 +1285,18 @@
                         <select id="langSelect" onchange="changeLang(this.value)"></select>
                         <span class="code-lang-badge" id="codeLangBadge"></span>
                         <span class="code-toolbar-tip">⌘/Ctrl 快捷键同 VS Code</span>
+                    </div>
+                    <div class="text-toolbar" id="textToolbar">
+                        <button class="fmt-btn" onclick="wrapTextFormat('bold')" title="加粗 (Ctrl+B)"><b>B</b></button>
+                        <button class="fmt-btn" onclick="wrapTextFormat('italic')" title="斜体 (Ctrl+I)"><i>I</i></button>
+                        <button class="fmt-btn" onclick="wrapTextFormat('underline')" title="下划线 (Ctrl+U)"><u>U</u></button>
+                        <button class="fmt-btn" onclick="wrapTextFormat('strike')" title="删除线 (Ctrl+Shift+X)"><s>S</s></button>
+                        <span class="fmt-sep"></span>
+                        <input type="color" id="textColorInput" value="#e74c3c" class="fmt-color" title="文字颜色" oninput="wrapTextColor(this.value)">
+                        <span class="fmt-color-label">颜色</span>
+                        <span class="fmt-sep"></span>
+                        <button class="fmt-btn" onclick="wrapTextFormat('inlinecode')" title="行内代码 (Ctrl+E)"><code>#</code></button>
+                        <span class="fmt-tip">选中文字后点按钮或快捷键</span>
                     </div>
                     <div class="code-editor-wrap" id="codeEditorWrap" style="display:none;">
                         <div id="codeEditor"></div>
@@ -1811,6 +1852,54 @@ function closeEditor() {
     renderNoteList();
 }
 
+// ── 文本格式化（下划线/加粗/斜体/删除线/颜色）──
+const FMT_MARKERS = {
+    bold:        { before: '**', after: '**',   kw: '加粗' },
+    italic:      { before: '*',  after: '*',    kw: '斜体' },
+    underline:   { before: '__', after: '__',   kw: '下划线' },
+    strike:      { before: '~~', after: '~~',   kw: '删除线' },
+    inlinecode:  { before: '`',  after: '`',    kw: '行内代码' }
+};
+
+function getEditorTextarea() {
+    // 文本模式下取 textarea；代码模式（Monaco）不适用格式化
+    const ta = document.getElementById('contentInput');
+    const pane = document.getElementById('editPane');
+    return (pane && pane.classList.contains('code-mode')) ? null : ta;
+}
+
+function wrapTextFormat(type) {
+    const ta = getEditorTextarea();
+    if (!ta) { toast('代码模式不支持文字格式'); return; }
+    const m = FMT_MARKERS[type];
+    if (!m) return;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const val = ta.value;
+    const sel = val.substring(start, end) || m.kw; // 无选区时插入示例词
+    const wrapped = m.before + sel + m.after;
+    ta.value = val.substring(0, start) + wrapped + val.substring(end);
+    // 选中被包裹的文本，便于连续操作
+    ta.focus();
+    ta.selectionStart = start + m.before.length;
+    ta.selectionEnd = start + m.before.length + sel.length;
+    onContentChange();
+}
+
+function wrapTextColor(color) {
+    const ta = getEditorTextarea();
+    if (!ta) { toast('代码模式不支持文字格式'); return; }
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const val = ta.value;
+    const sel = val.substring(start, end) || '彩色文字';
+    const hex = (color || '#e74c3c').replace(/^#/, '');
+    const wrapped = '{#' + hex + '|' + sel + '}';
+    ta.value = val.substring(0, start) + wrapped + val.substring(end);
+    ta.focus();
+    ta.selectionStart = start + wrapped.indexOf(sel);
+    ta.selectionEnd = ta.selectionStart + sel.length;
+    onContentChange();
+}
+
 function onContentChange() {
     if (!currentNoteId) return;
     const note = notes.find(n => n.id === currentNoteId);
@@ -1926,6 +2015,12 @@ function parseMarkdown(md) {
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    // 文字颜色 {#hex|文本}
+    html = html.replace(/\{#([0-9a-fA-F]{3,8})\|(.+?)\}/g, '<span style="color:#$1">$2</span>');
+    // 删除线 ~~文本~~
+    html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
+    // 下划线 __文本__（避免与粗体 ** 冲突）
+    html = html.replace(/__(?!_)(.+?)(?<!_)__/g, '<u>$1</u>');
     // 粗体/斜体
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
@@ -2119,6 +2214,13 @@ document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); createNote(); }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') { e.preventDefault(); togglePreview(); }
     if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); forceSave(); }
+    // 文本格式化快捷键（仅焦点在文本编辑区时生效）
+    if ((e.ctrlKey || e.metaKey) && document.activeElement && document.activeElement.id === 'contentInput') {
+        const k = e.key.toLowerCase();
+        const fmtMap = { b: 'bold', i: 'italic', u: 'underline', e: 'inlinecode' };
+        if (fmtMap[k]) { e.preventDefault(); wrapTextFormat(fmtMap[k]); }
+        if (e.shiftKey && k === 'x') { e.preventDefault(); wrapTextFormat('strike'); }
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === '1') { e.preventDefault(); switchSection('personal'); }
     if ((e.ctrlKey || e.metaKey) && e.key === '2') { e.preventDefault(); switchSection('work'); }
     if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); document.getElementById('searchInput').focus(); }
@@ -2415,6 +2517,8 @@ function applyEditorMode(note) {
 
     editPane.classList.toggle('code-mode', isCode);
     codeToolbar.style.display = isCode ? 'flex' : 'none';
+    const textToolbar = document.getElementById('textToolbar');
+    if (textToolbar) textToolbar.style.display = isCode ? 'none' : 'flex';
     textarea.style.display = isCode ? 'none' : 'block';
 
     if (!isCode) {
