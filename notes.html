@@ -624,6 +624,29 @@
         .editor-toolbar .title-input::placeholder { color: var(--text3); }
         .toolbar-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
+        /* 编辑区缩放控件 */
+        .zoom-control {
+            display: flex; align-items: center; gap: 2px;
+            background: var(--surface2); border-radius: 8px; padding: 2px;
+            flex-shrink: 0; user-select: none;
+        }
+        .zoom-btn, .zoom-val {
+            border: none; background: transparent; cursor: pointer;
+            font-family: inherit; color: var(--text2);
+            border-radius: 6px; transition: all var(--transition-fast);
+        }
+        .zoom-btn {
+            width: 26px; height: 26px; font-size: 15px; font-weight: 700;
+            line-height: 1; display: flex; align-items: center; justify-content: center;
+        }
+        .zoom-btn:hover { background: var(--surface); color: var(--text); }
+        .zoom-val {
+            min-width: 46px; height: 26px; font-size: 12px; font-weight: 600;
+            color: var(--text); text-align: center;
+        }
+        .zoom-val:hover { background: var(--surface); }
+        @media (max-width: 900px) { .zoom-val { min-width: 40px; } }
+
         .btn {
             padding: 7px 13px; border: 1px solid var(--border);
             border-radius: var(--radius-xs); background: var(--surface);
@@ -1207,6 +1230,11 @@
                 <div class="type-switch" id="typeSwitch">
                     <button id="typeTextBtn" class="active" onclick="switchNoteType('text')" title="文本 / Markdown 笔记">📝 文本</button>
                     <button id="typeCodeBtn" onclick="switchNoteType('code')" title="代码笔记：语法高亮 + VS Code 快捷键">⟨/⟩ 代码</button>
+                </div>
+                <div class="zoom-control" id="zoomControl" title="编辑区缩放：Ctrl/Cmd + 鼠标滚轮">
+                    <button class="zoom-btn" onclick="zoomEditor(-1)" title="缩小 (Ctrl+滚轮↓)">−</button>
+                    <button class="zoom-val" id="zoomLabel" onclick="resetZoom()" title="当前缩放比例，点击重置 (100%)">100%</button>
+                    <button class="zoom-btn" onclick="zoomEditor(1)" title="放大 (Ctrl+滚轮↑)">＋</button>
                 </div>
                 <div class="toolbar-actions">
                     <button class="btn save-btn" onclick="forceSave()" title="立即保存到本机与云端 (Ctrl+S)">💾 保存</button>
@@ -2306,6 +2334,76 @@ function disposeMonacoEditor() {
     if (pv) pv.innerHTML = '';
 }
 
+// ═══════════════════════════════════════
+// 编辑区缩放
+// ═══════════════════════════════════════
+const ZOOM_KEY = 'notes.editorZoom';
+const ZOOM_MIN = 60, ZOOM_MAX = 200, ZOOM_STEP = 10;
+let editorZoom = parseInt(localStorage.getItem(ZOOM_KEY), 10) || 100;
+editorZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, editorZoom));
+
+function zoomEditor(delta) {
+    setZoom(editorZoom + (delta > 0 ? ZOOM_STEP : -ZOOM_STEP));
+}
+function resetZoom() {
+    setZoom(100);
+}
+function setZoom(val) {
+    val = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, val));
+    if (val === editorZoom) return;
+    editorZoom = val;
+    localStorage.setItem(ZOOM_KEY, String(editorZoom));
+    applyZoom();
+    const label = document.getElementById('zoomLabel');
+    if (label) label.textContent = editorZoom + '%';
+    // 代码编辑/预览编辑器需要重排
+    if (window.monaco) {
+        if (monacoEditor) setTimeout(() => monacoEditor.layout(), 30);
+        if (monacoPreviewEditor) setTimeout(() => monacoPreviewEditor.layout(), 30);
+    }
+    const note = currentNoteId ? notes.find(n => n.id === currentNoteId) : null;
+    if (previewVisible && note && note.type === 'text') renderPreview();
+}
+
+function applyZoom() {
+    const scale = editorZoom / 100;
+    // 文本编辑区（textarea）与普通文本预览
+    const ta = document.getElementById('contentInput');
+    if (ta) ta.style.fontSize = (14 * scale) + 'px';
+    const md = document.getElementById('mdPreview');
+    if (md) md.style.fontSize = (14 * scale) + 'px';
+    const plain = document.querySelector('.code-plain');
+    if (plain) plain.style.fontSize = (12 * scale) + 'px';
+    // 代码编辑（Monaco）
+    if (window.monaco && monacoEditor) {
+        monacoEditor.updateOptions({ fontSize: Math.round(13 * scale) });
+    }
+    // 代码预览（Monaco）
+    if (window.monaco && monacoPreviewEditor) {
+        monacoPreviewEditor.updateOptions({ fontSize: Math.round(12 * scale) });
+    }
+}
+
+// 鼠标滚轮缩放：Ctrl/Cmd + 滚轮 在编辑区生效
+function handleEditorWheelZoom(e) {
+    if (!e.ctrlKey && !e.metaKey) return true; // 非缩放键，放行
+    // 仅在编辑区（工具栏、编辑面板、预览）内响应，避免误拦截整页缩放
+    const target = e.target;
+    const area = target.closest('#editorPanel') || target.closest('#editorEmpty');
+    if (!area) return true;
+    e.preventDefault();
+    zoomEditor(e.deltaY < 0 ? 1 : -1);
+    return false;
+}
+document.addEventListener('wheel', handleEditorWheelZoom, { passive: false });
+
+// 初始化缩放显示与默认字号
+function initZoomUI() {
+    const label = document.getElementById('zoomLabel');
+    if (label) label.textContent = editorZoom + '%';
+    applyZoom();
+}
+
 function applyEditorMode(note) {
     const editPane = document.getElementById('editPane');
     const textarea = document.getElementById('contentInput');
@@ -2615,6 +2713,8 @@ document.addEventListener('keydown', e => {
     scheduleAutoSave();
     // 初始化代码编辑器语言列表，空闲时预加载 Monaco
     buildLangSelect();
+    // 初始化编辑区缩放
+    initZoomUI();
     const preloadMonaco = () => loadMonaco().catch(() => {});
     if ('requestIdleCallback' in window) requestIdleCallback(preloadMonaco, { timeout: 8000 });
     else setTimeout(preloadMonaco, 3000);
