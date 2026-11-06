@@ -1,0 +1,18 @@
+{
+  "name": "hex-brawl-assistant",
+  "version": "1.0.0",
+  "description": "海克斯大乱斗助手 - 置顶悬浮窗 / 自动识别英雄 / 自动接受对局",
+  "main": "electron/main.js",
+  "author": "lee",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0"
+  }
+}
